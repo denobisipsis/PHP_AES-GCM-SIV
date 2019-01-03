@@ -117,8 +117,9 @@ class AES_GCM_SIV
 			$this->iv = pack("H*",$iv);			
 			return;
 			}
-									
-		$this->generatesbox();	
+		
+		if ($this->sbox=="")							
+			$this->generatesbox();	
 		
 		$this->Nb = $block_size/4;
 		$this->Nk = strlen($key)/8;
@@ -143,7 +144,7 @@ class AES_GCM_SIV
 		
 		if ($this->gcm_tag_length) $mode="gcm";	
 		}
-		
+	
 	function rOTL8($x,$shift) 
 		{
 		// FOR AFFINE TRANSFORMATION
@@ -463,6 +464,7 @@ class AES_GCM_SIV
 		$key_length=mb_strlen($K, '8bit') * 8;
 					
 		if (!in_Array($tag_length, [128, 120, 112, 104, 96])) print_r('Invalid tag length. Supported values are: 128, 120, 112, 104 and 96.');	
+		
 		/**		
 		To check, but it works with 160 & 224 too		
 		if (!in_Array($key_length, [128, 192, 256])) print_r('Bad key encryption key length. Supported values are: 128, 192 and 256.');	
@@ -755,8 +757,8 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		   	   
 		*/
   		
-		$nonce=$this->iv_gcm;
-		$key  =$this->key;
+		$nonce = $this->iv_gcm;
+		$key   = $this->key;
 						
 		list ($message_authentication_key,$message_encryption_key) = $this->derive_keys($key,$nonce);
 
@@ -768,20 +770,19 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		list ($blength,$A) = $this->siv_pad($A);		
 		list ($bl,$P) 	   = $this->siv_pad($P);
 					
-		$input=bin2hex($A.$P).$blength.$bl;
-		
-		$X0 = pack("H*",$message_authentication_key);		
-		$X  = pack("H*",$input);	
-  		$Y=$this->siv_xor_nonce($this->siv_polyval($X,$X0));						
+		$input = bin2hex($A.$P).$blength.$bl;				
+		$X   = pack("H*",$message_authentication_key.$input);	
+  		$Y   = $this->siv_xor_nonce($this->siv_polyval($X));						
 		$tag = $this->siv_tag($Y,$message_encryption_key);
 	
 		$counter_block = $this->siv_init_counter($tag); 		
-		$cipher="";
+		$cipher = "";
+		$blocks = str_split($P0,16);
 		
-	        for ($i = 0; $i < strlen(bin2hex($P0))/32; $i++) 
+	        for ($i = 0; $i < sizeof($blocks); $i++) 
 		    {		    
-		    $cipher.=pack("H*",$this->encrypt_ecb($counter_block))^substr($P0,$i*16,16);
-		    $counter_block=$this->siv_inc($counter_block);  
+		    $cipher.=pack("H*",$this->encrypt_ecb($counter_block))^$blocks[$i];
+		    $counter_block = $this->siv_inc($counter_block);  
 		    }
 		
 		$this->init("gcm",$key,$nonce,16);
@@ -796,127 +797,98 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		  						
 		list ($message_authentication_key,$message_encryption_key) = $this->derive_keys($key,$nonce);
 				
-		if (ctype_xdigit($C)) $C = pack("H*",$C);
-		if (ctype_xdigit($A)) $A = pack("H*",$A);
+		if (ctype_xdigit($C))  $C = pack("H*",$C);
+		if (ctype_xdigit($A))  $A = pack("H*",$A);
 		
-		$tag=substr($C,-16);	
-			
-		$C  =substr($C,0,-16);
-				
-		$counter_block = $this->siv_init_counter(bin2hex($tag));
-				
-		$plaintext="";
-		
+		$tag = bin2hex(substr($C,-16));						
+		$C   = str_split(substr($C,0,-16),16);
+						
+		$counter_block = $this->siv_init_counter($tag);										
 		$this->init('ecb', $message_encryption_key,"",16);
+		$plaintext = "";
 				
-	        for ($i = 0; $i < strlen(bin2hex($C))/32; $i++) 
-		    {		    
-		    $plaintext.=pack("H*",$this->encrypt_ecb($counter_block))^substr($C,$i*16,16);		    
-		    $counter_block=$this->siv_inc($counter_block);  
+	        for ($i = 0; $i < sizeof($C); $i++) 
+		    {	    
+		    $plaintext.=pack("H*",$this->encrypt_ecb($counter_block))^$C[$i];		    
+		    $counter_block = $this->siv_inc($counter_block);  
 		    }
-		
+		 
 		// now checking auth
 		 
 		list ($blength,$A) = $this->siv_pad($A);		
 		list ($bl,$C) 	   = $this->siv_pad($plaintext);
 					
-		$input=bin2hex($A.$C).$blength.$bl;
-
-		$X0 = pack("H*",$message_authentication_key);		
-		$X  = pack("H*",$input);
-						  
-		$S_s = $this->siv_polyval($X,$X0);
-		
-		$this->iv_gcm=$nonce;
-								
-		$S_s=$this->siv_xor_nonce($S_s);
-		
-		$expected_tag = substr(pack("H*",$this->encrypt_ecb($S_s)),0,16);
+		$input = bin2hex($A.$C).$blength.$bl;		
+		$X     = pack("H*",$message_authentication_key.$input);			
+		$this->iv_gcm = $nonce;										
+		$S_s   = $this->siv_xor_nonce($this->siv_polyval($X));						
+		$expected_tag = substr($this->encrypt_ecb($S_s),0,32);
 		
 		$this->init("gcm",$key,$nonce,16);
 		
-		if (bin2hex($expected_tag)!=bin2hex($tag)) 
+		if ($expected_tag!=$tag) 
 		    die("fail");
 		  		
-		return $plaintext;
+		return bin2hex($plaintext);
 	    	}
 		    
 	function derive_keys($key, $nonce) 
 		{		  		  
 		  $this->init('ecb',$key,$nonce,16);		  
-		  	  
-		  $C0 = $this->encrypt_ecb(pack("H*","00000000".$nonce));
-		  $C1 = $this->encrypt_ecb(pack("H*","01000000".$nonce));
-		  $message_authentication_key = substr($C0,0,16).substr($C1,0,16);
 		  
-		  $C0 = $this->encrypt_ecb(pack("H*","02000000".$nonce));
-		  $C1 = $this->encrypt_ecb(pack("H*","03000000".$nonce));
-		  $message_encryption_key = substr($C0,0,16).substr($C1,0,16);	
+		  $keys="";for ($k=0;$k<6;$k++) $keys.="0$k"."000000".$nonce;					  
+		  $kenc=$this->encrypt_ecb(pack("H*",$keys));
+
+		  $message_authentication_key 	= substr($kenc,0,16).substr($kenc,32,16);
+		  $message_encryption_key 	= substr($kenc,64,16).substr($kenc,96,16);	
 						
-		  if (strlen($key) == 64) 
-			  {	    
-			  $C0 = $this->encrypt_ecb(pack("H*","04000000".$nonce));
-			  $C1 = $this->encrypt_ecb(pack("H*","05000000".$nonce));
-			  $message_encryption_key.= substr($C0,0,16).substr($C1,0,16);
-			  }
-			  
+		  if (strlen($key) == 64) 			  	    			  
+		        $message_encryption_key.= substr($kenc,128,16).substr($kenc,160,16);
+			  			  
 		  return [$message_authentication_key, $message_encryption_key];
 		}
 
 	function siv_pad($m)
 		{
-		$len=strlen($m)*8;
-		
+		$len=strlen($m)*8;		
 		$len=sprintf("%02x%02x",$len & 255, ($len/256) & 255);
-
-		$blength=$len.str_Repeat("0",16-strlen($len));
-		
+		$blength=$len.str_Repeat("0",16-strlen($len));		
 		$pad=0;$mod=strlen($m)%16;
 						
-		if ($mod!=0)		
-			$pad=16-$mod;
-						
-		if ($m!="")		
-			$m.=str_repeat("\x0",$pad);
+		if ($mod!=0)	$pad=16-$mod;						
+		if ($m!="")	$m.=str_repeat("\x0",$pad);
 			
 		return [$blength,$m];		
 		}
 		
-	function siv_polyval($X,$X0)
+	function siv_polyval($X)
 		{
-		$Y = str_pad('', 16, "\0");
+		$Y = str_pad('', 16, "\0");		
+		$H  = pack("H*","40000000000000000000000000000000");		
+		$X=str_split($this->reverse($X) , 16);		
+	        $nblocks = sizeof($X) - 1;		
+		$H = $this->GMUL($Y ^ $X[$nblocks],$H);
 		
-		$H  = pack("H*","40000000000000000000000000000000");
-		
-	        $nblocks = (int) (mb_strlen($X, '8bit') / 16);
-	
-		$H = $this->GMUL($Y ^ $this->reverse($this->SB(128, $X0, 0)),$H);
-		 
-	        for ($i = 0; $i < $nblocks; $i++) 
-		    {
-	            $Y = ($this->GMUL($Y ^ $this->reverse($this->SB(128, $X, $i * 16)),$H));		    
-		    }
-	
+	        for ($i = $nblocks-1; $i >= 0; $i--) 
+			$Y = $this->GMUL($Y ^ $X[$i] , $H);		    
+		    	
   		return $this->reverse($Y);		
 		}
 		
 	function siv_tag($Y,$message_encryption_key)
 		{
-		$this->init('ecb', $message_encryption_key,"",16);
-		
+		$this->init('ecb', $message_encryption_key,"",16);		
 		return substr($this->encrypt_ecb($Y),0,32);		
 		}
 		
 	function siv_xor_nonce($Y)
 		{
-		$Y=str_split($Y);
-		
+		$Y=str_split($Y);		
 		$nonce=str_split(pack("H*",$this->iv_gcm));		
 
-		for ($i = 0; $i < 12; $i++) {
-		    $Y[$i]^= $nonce[$i];			   
-		  }
-
+		for ($i = 0; $i < 12; $i++) 	
+			$Y[$i]^= $nonce[$i];			   
+		  
 		$Y[15]=pack("H*",sprintf("%02x",ord($Y[15]) & 0x7f));	
 		
 		return implode($Y); 		
@@ -924,20 +896,22 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		
 	function siv_init_counter($tag)
 		{
-		$counter_block = str_split(pack("H*",$tag));
-	
-		$counter_block[15]|="\x80";
-		
+		$counter_block = str_split(pack("H*",$tag));	
+		$counter_block[15]|="\x80";		
 		return implode($counter_block); 		
 		}
 		
 	function siv_inc($counter)
 		{
-		$counter=str_split($this->reverse($counter),4);
-		     
-		$counter[3]=pack("H*",sprintf("%08x",hexdec(bin2hex($counter[3]))+1));
-
-		return $this->reverse(implode($counter));		
+	        for ($j = 16; $j >= 4; $j-=4) 
+			{
+		        $temp = strrev(substr($counter, -$j, 4));
+	                extract(unpack('Ncount', $temp));		
+	                $long=pack('N', $count+1);
+			$counter = substr_replace($counter, strrev($long), -$j, 4);			
+			if ($temp!=0xFFFFFFFF and $temp!=0x7FFFFFFF) break;					
+		        }
+		return $counter;		
 		}
 			
 	function reverse($m)
@@ -2103,6 +2077,8 @@ Result (40 bytes) =         18ce4f0b8cb4d0cac65fea8f79257b20
 
 	$n=0;
 	
+	$t=time();
+	
 	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
 		{					
 		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
@@ -2131,8 +2107,10 @@ Result (40 bytes) =         18ce4f0b8cb4d0cac65fea8f79257b20
 		$C = $x->AES_GCM_SIV_encrypt($text,$A);
 		
 		echo "Computed tag 	".substr($C,-32)."\n";
-		echo "Computed result ".$C."\n\n";		
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";		
 		}
+	echo time()-$t;
 	}
 
 check_AES_GCM_SIV();	
