@@ -59,6 +59,10 @@ THERE IS A VECTOR-TEST to validate THIS AES-GCM, SIMPLY RUN testvectors_gcm()
 
 THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 
+Also there is a json with the test vectors (wycheproof style)
+
+aes_gcm_siv_test_draft.09.json
+
 Support modes:
 
 GCM: AES Galois Counter Mode
