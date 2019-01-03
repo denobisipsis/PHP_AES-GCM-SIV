@@ -865,14 +865,14 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		{
 		$Y = str_pad('', 16, "\0");		
 		$H  = pack("H*","40000000000000000000000000000000");		
-		$X=str_split($this->reverse($X) , 16);		
+		$X=str_split(strrev($X) , 16);		
 	        $nblocks = sizeof($X) - 1;		
 		$H = $this->GMUL($Y ^ $X[$nblocks],$H);
 		
 	        for ($i = $nblocks-1; $i >= 0; $i--) 
 			$Y = $this->GMUL($Y ^ $X[$i] , $H);		    
 		    	
-  		return $this->reverse($Y);		
+  		return strrev($Y);		
 		}
 		
 	function siv_tag($Y,$message_encryption_key)
@@ -912,11 +912,6 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 			if ($temp!=0xFFFFFFFF and $temp!=0x7FFFFFFF) break;					
 		        }
 		return $counter;		
-		}
-			
-	function reverse($m)
-		{
-		return pack("H*",implode(array_reverse(str_split(bin2hex($m),2))));
 		}
 					
 	function encrypt($tocrypt,$A="",$T=null,$taglength=128)
@@ -2091,6 +2086,7 @@ Result (40 bytes) =         18ce4f0b8cb4d0cac65fea8f79257b20
 		$nonce	=str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0]));
 		$tag	=str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0]));
 		$result	=str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1]));
+		
 				
 		echo "Plaintext 		".$text."\n";
 		echo "AAD       		".$A."\n";
