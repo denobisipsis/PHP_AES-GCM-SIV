@@ -67,6 +67,7 @@ GCM: AES Galois Counter Mode
 GCM: SIV-AES Galois Counter Mode nonce misuse-resistant
 
 */
+
 class AES_GCM_SIV
 	{	
 	var $sbox;
@@ -613,7 +614,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -850,13 +851,13 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 	function siv_pad($m)
 		{
-		$len=strlen($m)*8;		
-		$len=sprintf("%02x%02x",$len & 255, ($len/256) & 255);
-		$blength=$len.str_Repeat("0",16-strlen($len));		
-		$pad=0;$mod=strlen($m)%16;
+		// max plaintext length 2**32 bits = 512 MBytes
+		
+		$blength=bin2hex(strrev(pack('N',strlen($m)*8)))."00000000";
+			
+		$mod=strlen($m)%16;
 						
-		if ($mod!=0)	$pad=16-$mod;						
-		if ($m!="")	$m.=str_repeat("\x0",$pad);
+		if ($mod) $m.=str_repeat("\x0",16-$mod);							
 			
 		return [$blength,$m];		
 		}
@@ -888,9 +889,9 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 		for ($i = 0; $i < 12; $i++) 	
 			$Y[$i]^= $nonce[$i];			   
-		  
-		$Y[15]=pack("H*",sprintf("%02x",ord($Y[15]) & 0x7f));	
 		
+		$Y[15]=pack("i",ord($Y[15]) & 0x7f);	
+
 		return implode($Y); 		
 		}
 		
@@ -1048,4 +1049,67 @@ function check_AES_GCM_SIV()
 	echo time()-$t;
 	}
 
-check_AES_GCM_SIV();	
+check_AES_GCM_SIV();
+
+/*
+	$n=0;
+	
+	$t=time();
+	
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
+				
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";
+		
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+			
+		
+		
+		$x->init("gcm",$key,$nonce,16);
+			
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
+		
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
+		}
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	
