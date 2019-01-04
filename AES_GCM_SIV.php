@@ -404,8 +404,7 @@ class AES_GCM_SIV
 		$tocrypt=$this->pad($tocrypt);							
 		$tocrypt=bin2hex($tocrypt);	
 		
-		$iv = array_values(unpack("C*",pack("H*",$this->iv)));	
-		
+		$iv = array_values(unpack("C*",pack("H*",$this->iv)));			
 						
 		$ENCRYPTED = "";		
 		$it=$this->block_size*2;		
@@ -553,21 +552,8 @@ class AES_GCM_SIV
 		$X = @array_shift(unpack("L",strrev($lsb))) + 1;
 	        return $this->SB($this->gLength($x) - $s_bits, $x).pack('N', $X);
 	    	}
-
-	function GMUL($X, $Y)
-	    	{
-		$Y=array_values(unpack("C*",$Y));		
-		$X=array_values(unpack("C*",$X));
-		
-		$Ztemp=$this->galois_multiplication($X,$Y);
-		
-		$Z="";
-		foreach ($Ztemp as $z) $Z.=sprintf("%02x",$z);
-		
-	        return pack("H*",$Z);
-	    	}
     
-	function galois_multiplication($Y,$X) 
+	function galois_multiplication($X,$Y) 
 		{		
 		/**
 		6.3 Multiplication Operation on Blocks 
@@ -614,7 +600,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -639,55 +625,53 @@ class AES_GCM_SIV
 			)
 			
 			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)		
-		*/
-		
-		if (!is_array($X)) $X=array($X);
-		if (!is_array($Y)) $Y=array($Y);
-		
-		$V=$Y;
-		
-		$s=sizeof($X);		
-		
-		if ($s==16) $R=0xe1;
-		else        $R=0x1b; // same as RCON
-		
-		$p=str_split(str_repeat("0",$s)); 
-		
-		for($i = 0; $i <$s; $i++) 
+		*/		
+			
+		if (is_numeric($Y))
 			{
-			if ($s==1) $f=$X[$i]; else
-			$f=bindec(strrev(sprintf("%08b",$X[$i]))); // to use with little endian						
+			$p=0;
+			for ($m=0;$m<8;$m++)
+				{				
+				if ($Y & 1)	$p^=$X; 				
+				$hi_bit_set = $X & 0x80;
+				$X <<= 1;
+				if($hi_bit_set == 0x80) $X ^= 0x1b;
+				$X %=256;
+				$Y>>=1;
+				}
+			return $p % 256;
+			}
+
+		$Y=array_values(unpack("C*",$Y));
+		$X=array_values(unpack("C*",$X));
+		
+		$s=sizeof($Y)-1;
+
+		$p=str_split(str_repeat("0",$s+1)); 
+					
+		for($i = 0; $i <=$s; $i++) 
+			{
+			$f=bindec(strrev(sprintf("%08b",$Y[$i]))); // to use with little endian	
 			
 			for ($m=0;$m<8;$m++)
 				{	 
-				if ($f & 1)	for($j=0;$j<$s;$j++) $p[$j]^=$V[$j] ; 
-
-				if ($s==1)						
-					$V[0]=$this->multiply($V[0]);									
-				else
-					{				
-					$LSB=$V[$s-1];
-					
-					$V[$s-1]>>=1;	
-							
-				        for($j=1;$j<$s;$j++)
-				            {			
-				            if ($V[$s-1-$j] & 1)
-					    	$V[$s-$j] |= 0x80;
-						    				
-				            $V[$s-1-$j]>>=1;          
-				            }
-					    
-					if ($LSB & 1)	
-							$V[0]^=$R;
-					}
-				
+				if ($f & 1)	for($j=0;$j<=$s;$j++) $p[$j]^=$X[$j];				
+									
+				$LSB=$X[$s];					
+				$X[$s]>>=1;	
+						
+			        for($j=1;$j<=$s;$j++)
+			            {			
+			            if ($X[$s-$j] & 1)	$X[$s-$j+1] |= 0x80;						    				
+			            $X[$s-$j]>>=1;          
+			            }
+				    
+				if ($LSB & 1)	$X[0]^=0xe1;									
 			        $f>>=1;
-			        }
+			        }			
 			}
-		
-		if ($s==1) $p=implode($p) % 256;
-		return $p;
+ 
+		return implode(array_map('chr', $p));
 		}
 			    	           				
 	function GCTR($K, $key_length, $ICB, $X)
@@ -725,7 +709,7 @@ class AES_GCM_SIV
 	        $Y = str_pad('', 16, "\0");
 	        $nblocks = (int) (mb_strlen($X, '8bit') / 16);
 	        for ($i = 0; $i < $nblocks; $i++) 
-	            $Y = $this->GMUL($Y ^ $this->SB(128, $X, $i * 16), $H);
+	            $Y = $this->galois_multiplication($Y ^ $this->SB(128, $X, $i * 16), $H);
 		    	        	
 	        return $Y;
 	    	} 
@@ -868,10 +852,10 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		$H  = pack("H*","40000000000000000000000000000000");		
 		$X=str_split(strrev($X) , 16);		
 	        $nblocks = sizeof($X) - 1;		
-		$H = $this->GMUL($Y ^ $X[$nblocks],$H);
+		$H = $this->galois_multiplication($Y ^ $X[$nblocks],$H);
 		
 	        for ($i = $nblocks-1; $i >= 0; $i--) 
-			$Y = $this->GMUL($Y ^ $X[$i] , $H);		    
+			$Y = $this->galois_multiplication($Y ^ $X[$i] , $H);		    
 		    	
   		return strrev($Y);		
 		}
@@ -883,16 +867,15 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		}
 		
 	function siv_xor_nonce($Y)
-		{
-		$Y=str_split($Y);		
+		{		
 		$nonce=str_split(pack("H*",$this->iv_gcm));		
 
 		for ($i = 0; $i < 12; $i++) 	
-			$Y[$i]^= $nonce[$i];			   
+			$Y[$i] = $Y[$i] ^ $nonce[$i];			   
 		
 		$Y[15]=pack("i",ord($Y[15]) & 0x7f);	
 
-		return implode($Y); 		
+		return $Y; 		
 		}
 		
 	function siv_init_counter($tag)
@@ -908,9 +891,9 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 	                extract(unpack('Ncount', $temp));		
 	                $long=pack('N', $count+1);
 			$counter = substr_replace($counter, strrev($long), -$j, 4);			
-			if ($temp!=0xFFFFFFFF and $temp!=0x7FFFFFFF) break;					
+			if ($temp!=0xFFFFFFFF and $temp!=0x7FFFFFFF) return $counter;				
 		        }
-		return $counter;		
+		return $counter;				
 		}
 					
 	function encrypt($tocrypt,$A="",$T=null,$taglength=128)
@@ -939,6 +922,57 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		return rtrim($text, "\0"); // TO AVOID BAD MCRYPT PADDING		
 		}		 
 	}
+
+function check_AES_GCM_SIV()
+	{	
+	// https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html#rfc.status Appendix C. Test vectors
+	
+	ECHO "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
+
+	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
+
+	$x=new AES_GCM_SIV;
+
+	$t=time();
+	
+	foreach ($testvectors->AES_GCM_SIV_tests as $test)
+		{
+		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
+		
+		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
+				
+		$text	= $test->msg;
+		$A	= $test->aad;
+		$key	= $test->key;
+		$nonce	= $test->iv;
+		$tag	= $test->tag;
+		$result	= $test->ct;
+							
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";			
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+		
+		$x->init("gcm",$key,$nonce,16);				
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		$ctag = substr($C,-32);
+		$cres = $C;
+		
+		echo "Computed tag 	".$ctag."\n";
+		echo "Computed result ".$cres."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
+		
+		if ($ctag!=$tag or $cres!=$result)
+			die("failed");								
+		}
+
+	echo time()-$t;
+	}
+
+check_AES_GCM_SIV();
 
 function testvectors_gcm()
 {	
@@ -993,58 +1027,75 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 	list($P, $T) = $x->decrypt($C, $A, $T,128);
 
 	echo "DECRYPTED P ".bin2hex($P)."\nDECRYPTED T $T\n\n";	
+	
+		if ($C!=$CTEST or $T!=$TTEST)
+			die("failed");	
 	}
 }
 
 //testvectors_gcm();
 
-function check_AES_GCM_SIV()
-	{	
-	// https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html#rfc.status Appendix C. Test vectors
+
+
+/*
+	$n=0;
 	
-	ECHO "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
-
-	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
-
-	$x=new AES_GCM_SIV;
-
 	$t=time();
 	
-	foreach ($testvectors->AES_GCM_SIV_tests as $test)
-		{
-		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
-		
-		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
 				
-		$text	= $test->msg;
-		$A	= $test->aad;
-		$key	= $test->key;
-		$nonce	= $test->iv;
-		$tag	= $test->tag;
-		$result	= $test->ct;
-							
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
 		echo "Plaintext 		".$text."\n";
 		echo "AAD       		".$A."\n";
 		echo "Key       		".$key."\n";
-		echo "Nonce     		".$nonce."\n";			
+		echo "Nonce     		".$nonce."\n";
+		
 		echo "Tag       		".$tag."\n";
 		echo "Result    		".$result."\n\n";
+			
 		
-		$x->init("gcm",$key,$nonce,16);				
+		
+		$x->init("gcm",$key,$nonce,16);
+			
 		$C = $x->AES_GCM_SIV_encrypt($text,$A);
 		
-		$ctag = substr($C,-32);
-		$cres = $C;
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
 		
-		echo "Computed tag 	".$ctag."\n";
-		echo "Computed result ".$cres."\n";
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
-		
-		if ($ctag!=$tag or $cres!=$result)
-			die("failed");								
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
 		}
-
-	echo time()-$t;
-	}
-
-check_AES_GCM_SIV();
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	
