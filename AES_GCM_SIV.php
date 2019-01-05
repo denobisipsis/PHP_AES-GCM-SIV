@@ -303,7 +303,7 @@ class AES_GCM_SIV
 				for ($k3=0;$k3<$this->Nb;$k3++)
 					{								
 					$t="";		
-					for ($k2=0;$k2<4;$k2++){$t^=$this->gf8($temp0[$k2][$k3],$mul[($k2+$k1*3)%4]);}					
+					for ($k2=0;$k2<4;$k2++){@($t^=$this->gf8($temp0[$k2][$k3],$mul[($k2+$k1*3)%4]));}					
 					$temp1[$k3*4+$k1]=$t;
 					}
 				}
@@ -363,7 +363,7 @@ class AES_GCM_SIV
 					$galoism="";
 					$index=($k1+($k3+$c+$k1)*4)%$this->block_size;
 					for ($k2=0;$k2<4;$k2++)
-						{$galoism^=$this->gf8($state[$k2+$k3*4],$mul[($k2+$k1*3)%4]) % 256;}	
+						{$galoism^=@($this->gf8($state[$k2+$k3*4],$mul[($k2+$k1*3)%4]) % 256);}	
 					$temp[$index]=array_Search($galoism,$this->sbox)^$ky[$index];				
 					}					
 				}
@@ -658,7 +658,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -1049,3 +1049,68 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 }
 
 testvectors_gcm();
+
+
+
+/*
+	$n=0;
+	
+	$t=time();
+	
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
+				
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";
+		
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+			
+		
+		
+		$x->init("gcm",$key,$nonce,16);
+			
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
+		
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
+		}
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	
