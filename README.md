@@ -15,7 +15,7 @@
 *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 *  02111-1307 USA
 *
-# Pure PHP Rijndael/AES-GCM-SIV code with each step explained
+# Pure PHP Rijndael/AES-GCM-SIV code with each step explained PHP 5 & 7
 
 # USAGE for AES-GCM
 
