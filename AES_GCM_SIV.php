@@ -87,6 +87,7 @@ class AES_GCM_SIV
 	
 	function init($mode='gcm',$key,$iv="",$block_size=16)
 		{
+		
 		$mode=strtolower($mode);
 						
 		if (!ctype_xdigit($key) and $mode!="gcm") $key=bin2hex($key);
@@ -477,6 +478,8 @@ class AES_GCM_SIV
 		
 	        $u = $this->calcVector($C);		
 	        $c_len_padding = $this->addPadding($C);	
+		
+		
 	        $S = $this->Hash($H, $A.str_pad('', $v / 8, "\0").$C.str_pad('', $u / 8, "\0").$a_len_padding.$c_len_padding);
 		
 		if ($T==null) $C=bin2hex($C); else $C=bin2hex($C2);
@@ -517,7 +520,48 @@ class AES_GCM_SIV
 
 	        return [$J0, $v, $a_len_padding, $H];
 		}
-		    
+			    	           				
+	function GCTR($K, $key_length, $ICB, $X)
+	    	{
+		/**
+		output of the GCTR function for a given block cipher with key K
+		applied to the bit string X with an initial counter block ICB		
+		*/
+		
+		if (empty($X)) return '';
+	        $n = (int) ceil(strlen(bin2hex($X))/32);			
+	        $Y = "";
+	        $CB = $ICB;
+	        for ($i = 0; $i < $n; $i++)
+			{		
+			$C = pack("H*",$this->encrypt_ecb($CB));
+			$Y.= $this->SB(128, $X, $i * 16) ^ $C;	            	
+			$CB = $this->Inc(32, $CB);
+			}	        	
+	        $Xn = $this->SB(null, $X, $n * 128);
+		$C = pack("H*",$this->encrypt_ecb($CB));
+	        $Y.= $Xn ^ $this->SB($this->gLength($Xn), $C);		
+	        return $Y;
+	    	}
+
+	function Hash($H, $X)
+	    	{
+		/**
+		output of the GHASH function under the hash subkey H applied to
+		the bit string X
+		
+		$H is the hash subkey
+		$X bit string such that len(X) = 128m for some positive integer m
+		*/
+	  				
+	        $Y = str_pad('', 16, "\0");
+	        $nblocks = (int) (mb_strlen($X, '8bit') / 16);
+	        for ($i = 0; $i < $nblocks; $i++) 
+	            $Y = $this->gf128($Y ^ $this->SB(128, $X, $i * 16), $H);
+		
+	        	
+	        return $Y;
+	    	} 		    
 	function calcVector($value)
 	    	{return (128 * ceil($this->gLength($value) / 128)) - $this->gLength($value);}
     
@@ -614,7 +658,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -643,67 +687,49 @@ class AES_GCM_SIV
 		
 		$Y=str_split($Y);
 		$X=array_values(unpack("C*",$X));		
-		$s=sizeof($Y)-1;
-		$p=str_split(str_repeat("0",$s+1)); 			
-		for($i = 0; $i <=$s; $i++) 
+		$p=str_repeat("\0",16);		
+		 
+		$mask0=str_repeat(sprintf("%08b",1),16);
+		$mask1=str_repeat("01111111",16);
+
+		$binX=implode(array_map(function($v) {return sprintf('%08b', $v);},array_reverse($X)));		
+		
+		for($i = 0; $i < 16; $i++) 
 			{			
 			$f=ord($Y[$i]);			
 			for ($m=0;$m<8;$m++)
 				{	 
-				if ($f & 0x80)	for($j=0;$j<=$s;$j++) $p[$j]^=$X[$j];							
-				$LSB=$X[$s];									
-				$X[$s]>>=1;							
-			        for($j=1;$j<=$s;$j++)
-			            {			
-			            if ($X[$s-$j] & 1)					    	 
-					    $X[$s-$j+1] |= 0x80;
-			            $X[$s-$j]>>=1;          
-			            }				    
-				if ($LSB & 1)	$X[0]^=0xe1;									
+				if ($f & 0x80)
+					$p^=implode(array_map(function($v) {return chr(bindec($v));},str_split($binX,8)));
+			 
+				 $xLSB=$binX[7];
+				 
+				 /*
+				 this equals to 
+				        $X[$s]>>=1;							
+	 			        for($j=1;$j<=$s;$j++)
+	 			            {			
+	 			            if ($X[$s-$j] & 1)					    	 
+	 					    $X[$s-$j+1] |= 0x80;
+	 			            $X[$s-$j]>>=1;          
+	 			            }
+					     
+				but is faster
+				*/
+				
+				$binX="0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
+				
+				if ($xLSB) 
+					 {
+					 $binXs=sprintf("%08b",bindec(substr($binX,-8))^0xe1);
+					 $binX =substr_replace($binX, $binXs, -8, 8);
+					 }
 			        $f<<=1;
 			        }			
 			}
-		return implode(array_map('chr', $p));
-		}
-			    	           				
-	function GCTR($K, $key_length, $ICB, $X)
-	    	{
-		/**
-		output of the GCTR function for a given block cipher with key K
-		applied to the bit string X with an initial counter block ICB		
-		*/		
-		if (empty($X)) return '';
-	        $n = (int) ceil(strlen(bin2hex($X))/32);			
-	        $Y = "";
-	        $CB = $ICB;
-	        for ($i = 0; $i < $n; $i++)
-			{		
-			$C = pack("H*",$this->encrypt_ecb($CB));
-			$Y.= $this->SB(128, $X, $i * 16) ^ $C;	            	
-			$CB = $this->Inc(32, $CB);
-			}	        	
-	        $Xn = $this->SB(null, $X, $n * 128);
-		$C = pack("H*",$this->encrypt_ecb($CB));
-	        $Y.= $Xn ^ $this->SB($this->gLength($Xn), $C);		
-	        return $Y;
-	    	}
 
-	function Hash($H, $X)
-	    	{
-		/**
-		output of the GHASH function under the hash subkey H applied to
-		the bit string X
-		
-		$H is the hash subkey
-		$X bit string such that len(X) = 128m for some positive integer m
-		*/	  				
-	        $Y = str_pad('', 16, "\0");
-	        $nblocks = (int) (mb_strlen($X, '8bit') / 16);
-	        for ($i = 0; $i < $nblocks; $i++) 
-	            $Y = $this->gf128($Y ^ $this->SB(128, $X, $i * 16), $H);
-		    	        	
-	        return $Y;
-	    	} 
+		return strrev($p);
+		}
 
 /**		  
 for AEAD_AES_128_GCM_SIV 
@@ -728,13 +754,13 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		   		
 		   POLYVAL(H, X_1, ..., X_n) =
 		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
-		   ByteReverse(X_n)))	
+		   ByteReverse(X_n)))
 		*/
   		
 		$nonce = $this->iv_gcm;
 		$key   = $this->key;
 						
-		list ($message_authentication_key,$message_encryption_key) = $this->derive_keys($key,$nonce);
+		list ($authkey,$enckey) = $this->derive_keys($key,$nonce);
 
 		if (ctype_xdigit($P)) $P = pack("H*",$P);
 		if (ctype_xdigit($A)) $A = pack("H*",$A);
@@ -745,22 +771,21 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		list ($bl,$P) 	   = $this->siv_pad($P);
 					
 		$input = bin2hex($A.$P).$blength.$bl;				
-		$X   = pack("H*",$message_authentication_key.$input);	
+		$X   = pack("H*",$authkey.$input);	
   		$Y   = $this->siv_xor_nonce($this->siv_polyval($X));						
-		$tag = $this->siv_tag($Y,$message_encryption_key);
+		$tag = $this->siv_tag($Y,$enckey);
 
 		$counter_block = $this->siv_init_counter($tag); 		
 		$cipher = "";
 		$blocks = str_split($P0,16);
 		
 	        for ($i = 0; $i < sizeof($blocks); $i++) 
-		    {		    
+		    {
 		    $cipher.=pack("H*",$this->encrypt_ecb($counter_block))^$blocks[$i];
 		    $counter_block = $this->siv_inc($counter_block);  
 		    }
 		
 		$this->init("gcm",$key,$nonce,16);
-		
 	        return bin2hex($cipher).$tag;
 	    	} 		    
 
@@ -769,7 +794,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		$nonce=$this->iv_gcm;
 		$key  =$this->key;
 		  						
-		list ($message_authentication_key,$message_encryption_key) = $this->derive_keys($key,$nonce);
+		list ($authkey,$enckey) = $this->derive_keys($key,$nonce);
 				
 		if (ctype_xdigit($C))  $C = pack("H*",$C);
 		if (ctype_xdigit($A))  $A = pack("H*",$A);
@@ -778,7 +803,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		$C   = str_split(substr($C,0,-16),16);
 						
 		$counter_block = $this->siv_init_counter($tag);										
-		$this->init('ecb', $message_encryption_key,"",16);
+		$this->init('ecb', $enckey,"",16);
 		$plaintext = "";
 				
 	        for ($i = 0; $i < sizeof($C); $i++) 
@@ -793,7 +818,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		list ($bl,$C) 	   = $this->siv_pad($plaintext);
 					
 		$input = bin2hex($A.$C).$blength.$bl;		
-		$X     = pack("H*",$message_authentication_key.$input);			
+		$X     = pack("H*",$authkey.$input);			
 		$this->iv_gcm = $nonce;										
 		$S_s   = $this->siv_xor_nonce($this->siv_polyval($X));						
 		$expected_tag = substr($this->encrypt_ecb($S_s),0,32);
@@ -814,13 +839,13 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.="0$k"."000000".$nonce;					  
 		  $kenc=$this->encrypt_ecb(pack("H*",$keys));
 
-		  $message_authentication_key 	= substr($kenc,0,16).substr($kenc,32,16);
-		  $message_encryption_key 	= substr($kenc,64,16).substr($kenc,96,16);	
+		  $authkey 	= substr($kenc,0,16).substr($kenc,32,16);
+		  $enckey 	= substr($kenc,64,16).substr($kenc,96,16);	
 						
 		  if ($len == 64) 			  	    			  
-		        $message_encryption_key.= substr($kenc,128,16).substr($kenc,160,16);
+		        $enckey.= substr($kenc,128,16).substr($kenc,160,16);
 		  	  			  
-		  return [$message_authentication_key, $message_encryption_key];
+		  return [$authkey, $enckey];
 		}
 
 	function siv_pad($m)
@@ -850,9 +875,9 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
   		return strrev($Y);		
 		}
 		
-	function siv_tag($Y,$message_encryption_key)
+	function siv_tag($Y,$enckey)
 		{
-		$this->init('ecb', $message_encryption_key,"",16);		
+		$this->init('ecb', $enckey,"",16);		
 		return substr($this->encrypt_ecb($Y),0,32);		
 		}
 		
@@ -923,7 +948,7 @@ function check_AES_GCM_SIV()
 
 	$x=new AES_GCM_SIV;
 
-	$t=time();
+	$t=microtime(true);
 	
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
 		{
@@ -959,7 +984,7 @@ function check_AES_GCM_SIV()
 			die("failed");								
 		}
 
-	echo time()-$t;
+	echo microtime(true)-$t."\n";
 	}
 
 check_AES_GCM_SIV();
@@ -1023,4 +1048,69 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 	}
 }
 
-//testvectors_gcm();	
+testvectors_gcm();
+
+
+
+/*
+	$n=0;
+	
+	$t=time();
+	
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
+				
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";
+		
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+			
+		
+		
+		$x->init("gcm",$key,$nonce,16);
+			
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
+		
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
+		}
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	

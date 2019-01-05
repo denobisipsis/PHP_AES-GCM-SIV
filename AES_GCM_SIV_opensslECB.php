@@ -460,7 +460,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -484,32 +484,53 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 			      0   0  0  1  1  0  1  1
 			)
 			
-			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)		
+			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)
 		*/		
 		
-		$Y=str_split($Y);
-		$X=array_values(unpack("C*",$X));		
-		$s=sizeof($Y)-1;
-		$p=str_split(str_repeat("0",$s+1)); 			
-		for($i = 0; $i <=$s; $i++) 
+		$Y = str_split($Y);
+		$X = array_values(unpack("C*",$X));		
+		$p = str_repeat("\0",16);		
+		 
+		$mask0 = str_repeat(sprintf("%08b",1),16);
+		$mask1 = str_repeat("01111111",16);
+
+		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},array_reverse($X)));		
+		
+		for($i = 0; $i < 16; $i++) 
 			{			
-			$f=ord($Y[$i]);			
+			$f=ord($Y[$i]);						
 			for ($m=0;$m<8;$m++)
 				{	 
-				if ($f & 0x80)	for($j=0;$j<=$s;$j++) $p[$j]^=$X[$j];							
-				$LSB=$X[$s];									
-				$X[$s]>>=1;							
-			        for($j=1;$j<=$s;$j++)
-			            {			
-			            if ($X[$s-$j] & 1)					    	 
-					    $X[$s-$j+1] |= 0x80;
-			            $X[$s-$j]>>=1;          
-			            }				    
-				if ($LSB & 1)	$X[0]^=0xe1;									
+				if ($f & 0x80) 
+				        $p^=implode(array_map(function($v) {return chr(bindec($v));},str_split($binX,8)));
+								 
+				 $xLSB=$binX[7];
+				 
+				 /*
+				 this equals to 
+				        $X[$s]>>=1;							
+	 			        for($j=1;$j<=$s;$j++)
+	 			            {			
+	 			            if ($X[$s-$j] & 1)					    	 
+	 					    $X[$s-$j+1] |= 0x80;
+	 			            $X[$s-$j]>>=1;          
+	 			            }
+					     
+				but is faster
+				*/
+				
+				$binX="0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
+				
+				if ($xLSB) 
+					 {
+					 $binXs=sprintf("%08b",bindec(substr($binX,-8))^0xe1);
+					 $binX =substr_replace($binX, $binXs, -8, 8);
+					 }
 			        $f<<=1;
 			        }			
 			}
-		return implode(array_map('chr', $p));
+	
+		return strrev($p);
 		}
 												
 	function pad($text='')
@@ -539,10 +560,10 @@ function check_AES_GCM_SIV()
 
 	$x=new AES_GCM_SIV;
 
-	$t=time();
+	$t=microtime(true);
 	
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
-		{
+		{		
 		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
 		
 		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
@@ -561,6 +582,7 @@ function check_AES_GCM_SIV()
 		echo "Tag       		".$tag."\n";
 		echo "Result    		".$result."\n\n";
 		
+
 		$x->init($key,$nonce);				
 		$C = $x->AES_GCM_SIV_encrypt($text,$A);
 		
@@ -572,10 +594,10 @@ function check_AES_GCM_SIV()
 		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
 		
 		if ($ctag!=$tag or $cres!=$result)
-			die("failed");								
+			die("failed");									
 		}
 
-	echo time()-$t;
+	echo microtime(true)-$t;
 	}
 
 check_AES_GCM_SIV();
@@ -623,7 +645,7 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 	$TTEST=$TVECTOR[5];
 	
 	ECHO "K $K\nP $P\nIV $IV\nA $A\nVALID C $CTEST\nVALID T $TTEST\n\n";
-		
+				
 	$x->init($K,$IV);
 	
 	list($C, $T) = $x->AES_GCM_encrypt($P, $A, "",128);
@@ -639,4 +661,69 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 	}
 }
 
-testvectors_gcm();	
+testvectors_gcm();
+
+
+
+/*
+	$n=0;
+	
+	$t=time();
+	
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
+				
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";
+		
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+			
+		
+		
+		$x->init("gcm",$key,$nonce,16);
+			
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
+		
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
+		}
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	
