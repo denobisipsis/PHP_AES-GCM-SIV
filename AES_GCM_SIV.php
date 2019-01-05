@@ -112,7 +112,8 @@ class AES_GCM_SIV
 				$iv=str_pad(substr($iv, 0, $this->block_size*2), $this->block_size*2, "00"); 
 						
 		$this->iv = $iv;
-
+		$this->generatesbox();
+		
 		if ($mode=="gcm") 
 			{
 			$this->K  = pack("H*",$key);
@@ -120,8 +121,7 @@ class AES_GCM_SIV
 			return;
 			}
 		
-		if ($this->sbox=="")							
-			$this->generatesbox();	
+	
 		
 		$this->Nb = $block_size/4;
 		$this->Nk = strlen($key)/8;
@@ -608,6 +608,7 @@ class AES_GCM_SIV
 			if($hi_bit_set == 0x80) $X ^= 0x1b;
 			$Y>>=1;
 			}
+			
 		return $p % 256;		
 		}
 		
@@ -658,7 +659,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) Â– x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -715,6 +716,13 @@ class AES_GCM_SIV
 	 			            }
 					     
 				but is faster
+				
+				explanans:
+				
+				1- "0".substr($binX,0,-1)  this equals to $binX >> 1
+				2- & mask1 flip first bit after shifting (must be 0)
+				3- substr($binX&$mask0,15) this saves highbit from all uint8 and alineates from 15 => if ($X[$s-$j] & 1) $X[$s-$j+1] |= 0x80;
+				4- make "or" from the 2 results above  
 				*/
 				
 				$binX="0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
@@ -869,8 +877,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 	        $nblocks = sizeof($X) - 1;		
 		$H = $this->gf128($Y ^ $X[$nblocks],$H);
 		
-	        for ($i = $nblocks-1; $i >= 0; $i--) 
-			$Y = $this->gf128($Y ^ $X[$i] , $H);		    
+	        do {$Y = $this->gf128($Y ^ $X[$nblocks-1] , $H);} while (--$nblocks>0);	    
 		    	
   		return strrev($Y);		
 		}
@@ -883,10 +890,9 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		
 	function siv_xor_nonce($Y)
 		{		
-		$nonce=str_split(pack("H*",$this->iv_gcm));		
-
-		for ($i = 0; $i < 12; $i++) 	
-			$Y[$i] = $Y[$i] ^ $nonce[$i];			   
+		$nonce=pack("H*",$this->iv_gcm);		
+		
+		$Y=substr_replace($Y,substr($Y,0,12)^$nonce,0,12);
 		
 		$Y[15]=pack("i",ord($Y[15]) & 0x7f);	
 
@@ -1013,6 +1019,7 @@ AES-128-GCM:00000000000000000000000000000000:000000000000000000000000:0000000000
 AES-128-GCM:00000000000000000000000000000000:ffffffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000:56b3373ca9ef6e4a2b64fe1e9a17b61425f10d47a75a5fce13efc6bc784af24f4141bdd48cf7c770887afd573cca5418a9aeffcd7c5ceddfc6a78397b9a85b499da558257267caab2ad0b23ca476a53cb17fb41c4b8b475cb4f3f7165094c229c9e8c4dc0a2a5ff1903e501511221376a1cdb8364c5061a20cae74bc4acd76ceb0abc9fd3217ef9f8c90be402ddf6d8697f4f880dff15bfb7a6b28241ec8fe183c2d59e3f9dfff653c7126f0acb9e64211f42bae12af462b1070bef1ab5e3606::566f8ef683078bfdeeffa869d751a017
 AES-128-GCM:843ffcf5d2b72694d19ed01d01249412:dbcca32ebf9b804617c3aa9e:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f:6268c6fa2a80b2d137467f092f657ac04d89be2beaa623d61b5a868c8f03ff95d3dcee23ad2f1ab3a6c80eaf4b140eb05de3457f0fbc111a6b43d0763aa422a3013cf1dc37fe417d1fbfc449b75d4cc5:00000000000000000000000000000000101112131415161718191a1b1c1d1e1f:3b629ccfbc1119b7319e1dce2cd6fd6d";
 
+
 $x=new AES_GCM_SIV; 
 
 $n=0;
@@ -1047,4 +1054,67 @@ foreach (explode("\n",$AES_GCM_TEST_VECTORS) as $TVECTOR)
 	}
 }
 
-testvectors_gcm();	
+testvectors_gcm();
+
+/*
+	$n=0;
+	
+	$t=time();
+	
+	$json='{
+		"generatorVersion":"denobisipsis",
+		"comment" : "draft-irtf-cfrg-gcmsiv-09",
+		"AES_GCM_SIV_tests":[';
+	
+	foreach (array_slice(explode("Plaintext",$test_vectors),1) as $tvector)
+		{					
+		$tvector=str_replace(array("\n","\x0a","\x0d"),"*",$tvector);
+
+		//echo "----------------------------------------TEST CASE $n \n\n";
+				
+		$text	=trim(str_replace(array("*"," "),"",trim(explode("AAD",explode(") =",$tvector)[1])[0])));
+		$A	=trim(str_replace(array("*"," "),"",trim(explode("Key",explode("=",explode("AAD",$tvector)[1])[1])[0])));
+		$key	=trim(str_replace(array("*"," "),"",trim(explode("Nonce",explode("Key =",$tvector)[1])[0])));
+		$nonce	=trim(str_replace(array("*"," "),"",trim(explode("Record",explode("Nonce =",$tvector)[1])[0])));
+		$tag	=trim(str_replace(array("*"," "),"",trim(explode("Initial",explode("Tag =",$tvector)[1])[0])));
+		$result	=trim(str_replace(array("*"," "),"",trim(explode("=",explode("Result",$tvector)[1])[1])));
+		
+		/*		
+		echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";
+		
+		echo "Tag       		".$tag."\n";
+		echo "Result    		".$result."\n\n";
+			
+		
+		
+		$x->init("gcm",$key,$nonce,16);
+			
+		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		
+		echo "Computed tag 	".substr($C,-32)."\n";
+		echo "Computed result ".$C."\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";	
+		
+		$json.=('
+			{
+			"ivSize" : "'.(strlen($nonce)*4).'",
+			"keySize" : "'.(strlen($key)*4).'",
+			"tagSize" : "'.(strlen($tag)*4).'",
+			"tcId" : "'.($n+1).'",			
+			"key" : "'.$key.'",
+			"iv" : "'.$nonce.'",
+			"aad" : "'.$A.'",
+			"msg" : "'.$text.'",
+			"ct" : "'.$result.'",
+			"tag" : "'.$tag.'"
+			},
+			'
+			);
+		++$n;
+		}
+	
+	$json=substr($json,0,-5);
+	$json.=']}';*/	
