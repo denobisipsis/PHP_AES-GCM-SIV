@@ -15,9 +15,9 @@
 *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 *  02111-1307 USA
 *
-# AES-GCM-SIV code with each step explained PHP 5 & 7
+#AES-GCM-SIV code with each step explained for PHP 5 & 7
 
-# USAGE 
+#USAGE for AES-GCM-SIV
 
 	$text	= "Hello World";
 	$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
@@ -25,18 +25,14 @@
 	$nonce	= "6245709fb18853f68d833640";
 	
 	$x=new AES_GCM_SIV;				
-	$x->init("gcm",$key,$nonce,16);
+	$x->init($key,$nonce);
 	
 	$C = $x->AES_GCM_SIV_encrypt($text,$A);
 	
 	$P = $x->AES_GCM_SIV_decrypt($C,$A);
 
-THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
-
-Also there is a json with the test vectors (wycheproof style)
-
-aes_gcm_siv_test_draft.09.json
+		THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 
 Support modes:
 
-GCM: SIV-AES Galois Counter Mode nonce misuse-resistant
+	- AES Galois Counter Mode nonce misuse-resistant (GCM-SIV)
