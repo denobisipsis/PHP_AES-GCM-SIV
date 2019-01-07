@@ -50,7 +50,7 @@ class AES_GCM_SIV
 
 	function __construct($p="",$R="",$mask0="",$maks1="")
 		{
-		$this->p 	= pack("H*",str_repeat("0",128));
+		$this->p 	= str_repeat("0",128);
 		$this->R 	= pack("H*","11100001");
 		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
 		$this->mask1 	= str_repeat("01111111",16);
@@ -279,7 +279,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) â€“ x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -365,38 +365,44 @@ class AES_GCM_SIV
 		*/
 			
 	function gf128($X,$Y) 
-		{			
+		{		
 		$Y = str_split($Y);		
 		$X = array_reverse(array_values(unpack("C*",$X)));
-				
-		$p = $this->p;		
+
+		$p = $this->p;				
 		$R = $this->R; // 0xe1
+		
+		// masks to fast shifting, oring and anding
 		
 		$mask0 = $this->mask0;
 		$mask1 = $this->mask1;
 		
-		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
+		// Work X in binary-string form binX
 		
+		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
+						
 		for($i = 0; $i < 16; $i++) 
 			{			
 			$f = ord($Y[$i]);						
 			for ($m = 0; $m < 8; $m++)
-				{	 
-				if ($f & 0x80) 				        
-					$p ^=pack("H*",$binX);
-													 
-				$xLSB = $binX[7];
-				
-				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
-				
-				if ($xLSB) 					 					
-					 $binX = substr($binX,0,-8).bin2hex(pack("H*",substr($binX,-8))^ $R);
-					 
+				{				 
+				if ($f & 0x80)
+					$p^=$binX;
+								 
+				$xLSB = $binX[7];				
+				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+				if ($xLSB)										 
+					 $binX = substr($binX,0,-8).bin2hex(pack("H*",substr($binX,-8))^ $R);				 
+														 				 
 			        $f <<=1;
-			        }			
+			        }				 			
 			}
-			
-		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split(bin2hex($p),8))));		
+		
+		// restore pure binary form of p (=result)
+		
+		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
+
+		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
 	}
 
