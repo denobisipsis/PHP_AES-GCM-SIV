@@ -2,21 +2,6 @@
 /**
 *  Copyright I-2019 denobisipsis
 *
-*  This program is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of the
-*  License, or (at your option) any later version.
-*
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-*  General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-*  02111-1307 USA
-*
 #AES-GCM-SIV code with each step explained for PHP 5 & 7
 
 #USAGE for AES-GCM-SIV
@@ -279,7 +264,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) – x
+		listed is such that the degree of f(x) â€“ x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
