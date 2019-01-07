@@ -17,35 +17,45 @@
 *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 *  02111-1307 USA
 *
-AES-GCM-SIV code with each step explained
+#AES-GCM-SIV code with each step explained for PHP 5 & 7
 
-USAGE for AES-GCM-SIV
+#USAGE for AES-GCM-SIV
 
-	$text	= "Hello World";
-	$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
-	$key	= "f901cfe8a69615a93fdf7a98cad48179";
-	$nonce	= "6245709fb18853f68d833640";
+$text	= "Hello World";
+$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
+$key	= "f901cfe8a69615a93fdf7a98cad48179";
+$nonce	= "6245709fb18853f68d833640";
+
+$x=new AES_GCM_SIV;				
+$x->init($key,$nonce);
+
+$C = $x->AES_GCM_SIV_encrypt($text,$A);
+
+$P = $x->AES_GCM_SIV_decrypt($C,$A);
+
+	THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 	
-	$x=new AES_GCM_SIV;				
-	$x->init($key,$nonce);
-	
-	$C = $x->AES_GCM_SIV_encrypt($text,$A);
-	
-	$P = $x->AES_GCM_SIV_decrypt($C,$A);
-
-		THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
-
 Support modes:
 
-	- AES Galois Counter Mode nonce misuse-resistant (GCM-SIV) 
+for AEAD_AES_128_GCM_SIV 
+
+https://eprint.iacr.org/2017/168.pdf
+
+https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 */
 
 class AES_GCM_SIV
-	{
-	var $nonce;
-	var $K;
-	var $block_bits;
-	
+	{	
+	public $nonce,$K,$block_bits,$p,$R,$mask0,$mask1; 
+
+	function __construct($p="",$R="",$mask0="",$maks1="")
+		{
+		$this->p 	= pack("H*",str_repeat("0",128));
+		$this->R 	= pack("H*","11100001");
+		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
+		$this->mask1 	= str_repeat("01111111",16);
+		}
+  	
 	function init($K,$nonce)
 		{
 		if (strlen($K)!=32 and strlen($K)!=64)
@@ -56,14 +66,6 @@ class AES_GCM_SIV
 		
 		$this->block_bits=strlen($K)*4;				
 		}
-
-/**		  
-for AEAD_AES_128_GCM_SIV 
-
-https://eprint.iacr.org/2017/168.pdf
-
-https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
-*/
 				    			
 	function AES_GCM_SIV_encrypt($P,$A="")
 	    	{  		
@@ -231,9 +233,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 		        }
 		return $counter;				
 		}
-				
-	function gf128($X,$Y) 
-		{		
+						
 		/**
 		6.3 Multiplication Operation on Blocks 
 		
@@ -303,33 +303,10 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 			      0   0  0  1  1  0  1  1
 			)
 			
-			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)
+			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)	
 			
-			
+		The main process equals to 
 		
-		*/	
-			
-		$Y = str_split($Y);		
-		$X = array_values(unpack("C*",$X));		
-		$p = str_repeat("\0",16);		
-		 
-		$mask0 = str_repeat(sprintf("%08b",1),16);
-		$mask1 = str_repeat("01111111",16);
-		
-		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},array_reverse($X)));
-
-		for($i = 0; $i < 16; $i++) 
-			{			
-			$f=ord($Y[$i]);						
-			for ($m=0;$m<8;$m++)
-				{	 
-				if ($f & 0x80) 
-				        $p^=implode(array_map(function($v) {return chr(bindec($v));},str_split($binX,8)));
-								 
-				 $xLSB=$binX[7];
-				 
-				 /**
-				 this equals to 
 				        $X[$s]>>=1;							
 	 			        for($j=1;$j<=$s;$j++)
 	 			            {			
@@ -338,7 +315,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 	 			            $X[$s-$j]>>=1;          
 	 			            }
 					     
-				but is faster
+				but as implemented here is faster
 				
 				explanans:
 				
@@ -384,22 +361,42 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 				    
 				    ab     = gf128_mul(a_poly, b_poly, R)
 				    
-				    dot(a,b) = convert(gf128_mul(ab, Ri, R))				
+				    dot(a,b) = convert(gf128_mul(ab, Ri, R))	
+		*/
+			
+	function gf128($X,$Y) 
+		{			
+		$Y = str_split($Y);		
+		$X = array_reverse(array_values(unpack("C*",$X)));
 				
-				*/
+		$p = $this->p;		
+		$R = $this->R; // 0xe1
+		
+		$mask0 = $this->mask0;
+		$mask1 = $this->mask1;
+		
+		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
+		
+		for($i = 0; $i < 16; $i++) 
+			{			
+			$f = ord($Y[$i]);						
+			for ($m = 0; $m < 8; $m++)
+				{	 
+				if ($f & 0x80) 				        
+					$p ^=pack("H*",$binX);
+													 
+				$xLSB = $binX[7];
 				
-				$binX="0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
+				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);
 				
-				if ($xLSB) 
-					 {
-					 $binXs=sprintf("%08b",bindec(substr($binX,-8))^0xe1);
-					 $binX =substr_replace($binX, $binXs, -8, 8);
-					 }
-			        $f<<=1;
+				if ($xLSB) 					 					
+					 $binX = substr($binX,0,-8).bin2hex(pack("H*",substr($binX,-8))^ $R);
+					 
+			        $f <<=1;
 			        }			
 			}
-
-		return strrev($p);
+			
+		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split(bin2hex($p),8))));		
 		}		 
 	}
 
@@ -413,6 +410,7 @@ function check_AES_GCM_SIV()
 
 	$x=new AES_GCM_SIV;
 	
+	$t=microtime(true);
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
 		{		
 		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
@@ -433,21 +431,22 @@ function check_AES_GCM_SIV()
 		echo "Tag       		".$tag."\n";
 		echo "Result    		".$result."\n\n";
 		
-		$x->init($key,$nonce);			
+		$x->init($key,$nonce);					
 			
 		$C = $x->AES_GCM_SIV_encrypt($text,$A);
-
+			
 		$ctag = substr($C,-32);
 		$cres = $C;
 		
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$cres."\n";
-
+				
 		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
-		
+				
 		if ($ctag!=$tag or $cres!=$result)
 			die("failed");											
-		}	
+		}
+	echo microtime(true)-$t;	
 	}
 
 check_AES_GCM_SIV();
