@@ -1,6 +1,6 @@
 *  Copyright I-2019 denobisipsis
 
-# AES-GCM-SIV code with each step explained for PHP 5 & 7
+# FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
 
 # USAGE 
 
