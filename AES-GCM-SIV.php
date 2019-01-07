@@ -279,7 +279,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) – x
+		listed is such that the degree of f(x) â€“ x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -410,7 +410,12 @@ function check_AES_GCM_SIV()
 
 	$x=new AES_GCM_SIV;
 	
-	$t=microtime(true);
+	if (!function_Exists("hrtime"))
+		{
+		function hrtime($bool) {return microtime($bool)*1000000000;}
+		} 
+		
+	$t=hrtime(true);
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
 		{		
 		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
@@ -432,8 +437,10 @@ function check_AES_GCM_SIV()
 		echo "Result    		".$result."\n\n";
 		
 		$x->init($key,$nonce);					
-			
+		
+		$t1=hrtime(true);	
 		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		echo "Encryption takes ".((hrtime(true)-$t1)/1000000)." ms\n";	
 			
 		$ctag = substr($C,-32);
 		$cres = $C;
@@ -444,9 +451,9 @@ function check_AES_GCM_SIV()
 		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
 				
 		if ($ctag!=$tag or $cres!=$result)
-			die("failed");											
+			die("failed");														
 		}
-	echo microtime(true)-$t;	
+	echo ((hrtime(true)-$t)/1000000)." ms";	
 	}
 
 check_AES_GCM_SIV();
