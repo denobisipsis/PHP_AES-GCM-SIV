@@ -410,6 +410,11 @@ function check_AES_GCM_SIV()
 
 	$x=new AES_GCM_SIV;
 	
+	if (!function_Exists("hrtime"))
+		{
+		function hrtime($bool) {return microtime($bool)*1000000000;}
+		} 
+		
 	$t=hrtime(true);
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
 		{		
