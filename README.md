@@ -17,7 +17,7 @@
 *
 # AES-GCM-SIV code with each step explained for PHP 5 & 7
 
-# USAGE for AES-GCM-SIV
+# USAGE 
 
 	$text	= "Hello World";
 	$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
