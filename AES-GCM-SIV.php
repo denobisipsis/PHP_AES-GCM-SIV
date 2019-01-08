@@ -279,7 +279,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) – x
+		listed is such that the degree of f(x) â€“ x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -369,8 +369,7 @@ class AES_GCM_SIV
 		if (bin2hex($X)=="00000000000000000000000000000000") return $this->Y;
 		
 		$Y = str_split($Y);		
-		$X = array_reverse(array_values(unpack("C*",$X)));
-		
+		$X = array_reverse(array_values(unpack("C*",$X)));		
 		
 		$p = $this->p;				
 		$R = $this->R; // 0xe1
