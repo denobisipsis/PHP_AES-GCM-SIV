@@ -370,31 +370,38 @@ class AES_GCM_SIV
 		// Work X in binary-string form binX
 		
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
-			
-		for($i = 0; $i < 16; $i++) 
-			{			
-			$f = ord($Y[$i]);						
-			for ($m = 0; $m < 8; $m++)
-				{				 
-				if ($f & 0x80) 
-					{
-					$p^=$binX;
-					// dont waste cpu time - 2
-					if ($isH) break 2;
-					} 
-								 
-				$xLSB = $binX[7];				
-				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-				if ($xLSB)
-					$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
-			        $f <<=1;
-			        }				 			
+		
+		// dont waste cpu time - 2
+		
+		if ($isH)
+			{
+			$xLSB = $binX[7];				
+			$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+			if ($xLSB)
+				$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+			$p^=$binX;			
 			}
+		else
+			for($i = 0; $i < 16; $i++) 
+				{			
+				$f = ord($Y[$i]);						
+				for ($m = 0; $m < 8; $m++)
+					{				 
+					if ($f & 0x80) 						
+						$p^=$binX;
+								 
+					$xLSB = $binX[7];				
+					$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+					if ($xLSB)
+						$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+				        $f <<=1;
+				        }				 			
+				}
 		
 		// restore pure binary form of p (=result)
-
-		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
 		
+		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
+
 		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
 	}
