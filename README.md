@@ -5,18 +5,19 @@
 # USAGE 
 
 	$text	= "Hello World";
-	$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
+	$aad	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
 	$key	= "f901cfe8a69615a93fdf7a98cad48179";
 	$nonce	= "6245709fb18853f68d833640";
 	
-	$x=new AES_GCM_SIV;				
-	$x->init($key,$nonce);
+	$x=new AES_GCM_SIV;
 	
-	$C = $x->AES_GCM_SIV_encrypt($text,$A);
+	$x->init($key,$nonce,$aad);
 	
-	$P = $x->AES_GCM_SIV_decrypt($C,$A);
+	$C = $x->AES_GCM_SIV_encrypt($text);
+	
+	$P = $x->AES_GCM_SIV_decrypt($C);
 
-		THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
+THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 
 # Support modes:
 
