@@ -17,7 +17,7 @@
 *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 *  02111-1307 USA
 *
-#AES-GCM-SIV code with each step explained for PHP 5 & 7
+#FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
 
 #USAGE for AES-GCM-SIV
 
@@ -46,7 +46,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 class AES_GCM_SIV
 	{	
-	public $nonce,$K,$block_bits,$p,$R,$mask0,$mask1,$H; 
+	public $nonce,$block_bits,$p,$R,$mask0,$mask1,$H,$authkey,$enckey,$blength,$A; 
 
 	function __construct($p="",$R="",$mask0="",$maks1="",$H="",$Y="")
 		{
@@ -58,30 +58,32 @@ class AES_GCM_SIV
 		$this->Y	= str_repeat("\0",16);				
 		}
   	
-	function init($K,$nonce)
+	function init($key,$nonce,$A="")
 		{
-		if (strlen($K)!=32 and strlen($K)!=64)
+		if (strlen($key)!=32 and strlen($key)!=64)
 			die("Key length should be 128 or 256 bits");
 
-		$this->K     = $K;
-		$this->nonce = $nonce;
+		$this->nonce = $nonce;		
+		$this->block_bits=strlen($key)*4;	
 		
-		$this->block_bits=strlen($K)*4;				
+		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);	
+					
+		if (ctype_xdigit($A)) $A = pack("H*",$A);
+		list ($this->blength,$this->A) = $this->siv_pad($A);		
 		}
 				    			
-	function AES_GCM_SIV_encrypt($P,$A="")
-	    	{  		
-		$nonce = $this->nonce;
-		$key   = $this->K;
-						
-		list ($authkey,$enckey) = $this->derive_keys($key,$nonce);
-
+	function AES_GCM_SIV_encrypt($P)
+	    	{ 			    	
+	    	$authkey = $this->authkey;
+		$enckey  = $this->enckey;						
+		
 		if (ctype_xdigit($P)) $P = pack("H*",$P);
-		if (ctype_xdigit($A)) $A = pack("H*",$A);
 				
 		$P0 = $P;
 				
-		list ($blength,$A) = $this->siv_pad($A);		
+		$A=$this->A;
+		$blength=$this->blength;
+				
 		list ($bl,$P) 	   = $this->siv_pad($P);
 					
 		$input = bin2hex($A.$P).$blength.$bl;				
@@ -90,6 +92,7 @@ class AES_GCM_SIV
 		$tag = $this->siv_tag($Y,$enckey);
 
 		$cblock = $this->siv_init_counter($tag); 
+		
 		$blocks = str_split($P0,16);		
 		$cipher = "";		
 		
@@ -102,31 +105,30 @@ class AES_GCM_SIV
 	        return bin2hex($cipher).$tag;
 	    	} 		    
 
-	function AES_GCM_SIV_decrypt($C,$A)
+	function AES_GCM_SIV_decrypt($C)
 	    	{  
-		$nonce=$this->nonce;
-		$key  =$this->K;
-		  						
-		list ($authkey,$enckey) = $this->derive_keys($key,$nonce);
+	    	$authkey = $this->authkey;
+		$enckey  = $this->enckey;
 				
 		if (ctype_xdigit($C))  $C = pack("H*",$C);
-		if (ctype_xdigit($A))  $A = pack("H*",$A);
 		
 		$tag = bin2hex(substr($C,-16));						
 		$C   = str_split(substr($C,0,-16),16);
 						
-		$cblock = $this->siv_init_counter($tag);										
+		$cblock    = $this->siv_init_counter($tag);										
 		$plaintext = "";
 				
 	        for ($i = 0; $i < sizeof($C); $i++) 
 		    {	    
-		    $plaintext.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$C[$i];		    
+		    $plaintext.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$C[$i];	    
 		    $cblock = $this->siv_inc($cblock);  
 		    }
 		 
 		// now checking auth
 		 
-		list ($blength,$A) = $this->siv_pad($A);		
+		$A=$this->A;
+		$blength=$this->blength;
+				
 		list ($bl,$C) 	   = $this->siv_pad($plaintext);
 					
 		$input = bin2hex($A.$C).$blength.$bl;		
@@ -135,8 +137,7 @@ class AES_GCM_SIV
 		$S_s   = $this->siv_xor_nonce($this->siv_polyval($X));						
 		$expected_tag = $this->siv_tag($S_s,$enckey);
 		
-		if ($expected_tag!=$tag) 
-		    die("fail");
+		if ($expected_tag!=$tag)die("fail");
 		  		
 		return bin2hex($plaintext);
 	    	}
@@ -145,9 +146,9 @@ class AES_GCM_SIV
 		{
 		  $len = strlen($key);
 		  
-		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.=pack("H*","0$k"."000000".$nonce);					  
+		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.=pack("H*","0$k"."000000".$nonce);		  				  
 		  $kenc=openssl_encrypt($keys, 'AES-'.$this->block_bits.'-ECB', pack("H*",$key), OPENSSL_RAW_DATA);
-		  
+			  		  
 		  $authkey 	= substr($kenc,0,8).substr($kenc,16,8);
 		  $enckey 	= substr($kenc,32,8).substr($kenc,48,8);	
 						
@@ -160,7 +161,7 @@ class AES_GCM_SIV
 	function siv_pad($m)
 		{
 		// max plaintext length 2**32 bits = 512 MBytes
-		
+					
 		$blength=bin2hex(strrev(pack('N',strlen($m)*8)))."00000000";
 			
 		$mod=strlen($m)%16;
@@ -190,14 +191,15 @@ class AES_GCM_SIV
 		   GHASH(mulX_GHASH(ByteReverse(H)) is $H = $this->gf128($Y ^ $X[$nblocks],$H);
 		   
 		   the rest is the do loop
-		*/		
+		*/
+			
 		$Y = $this->Y; 						
 		$X=str_split(strrev($X) , 16);				
 	        $nblocks = sizeof($X) - 1;		
 		$H = $this->gf128($Y ^ $X[$nblocks],$this->H);
 		
 	        do {$Y = $this->gf128($Y ^ $X[$nblocks-1] , $H);} while (--$nblocks>0);	    
-
+		
   		return strrev($Y);		
 		}
 		
@@ -208,12 +210,9 @@ class AES_GCM_SIV
 		
 	function siv_xor_nonce($Y)
 		{	
-		$nonce=pack("H*",$this->nonce);		
-		
-		$Y=substr_replace($Y,substr($Y,0,12)^$nonce,0,12);
-		
-		$Y[15]=pack("i",ord($Y[15]) & 0x7f);	
-
+		$nonce=pack("H*",$this->nonce);	
+		$Y=substr_replace($Y,substr($Y,0,12)^$nonce,0,12);		
+		$Y[15]=pack("i",ord($Y[15]) & 0x7f);
 		return $Y; 		
 		}
 		
@@ -366,10 +365,13 @@ class AES_GCM_SIV
 		*/
 			
 	function gf128($X,$Y) 
-		{		
+		{	
+		if (bin2hex($X)=="00000000000000000000000000000000") return $this->Y;
+		
 		$Y = str_split($Y);		
 		$X = array_reverse(array_values(unpack("C*",$X)));
-
+		
+		
 		$p = $this->p;				
 		$R = $this->R; // 0xe1
 		
@@ -401,7 +403,7 @@ class AES_GCM_SIV
 		// restore pure binary form of p (=result)
 		
 		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
-
+		
 		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
 	}
@@ -410,58 +412,57 @@ function check_AES_GCM_SIV()
 	{	
 	// https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html#rfc.status Appendix C. Test vectors
 	
+	/*
+	more test vectors
+	
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json
+	*/
+	
 	ECHO "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
-	
-	
-	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
-
-	$x=new AES_GCM_SIV;
-	
+			
+	$x=new AES_GCM_SIV;$n=0;
+		
 	if (!function_Exists("hrtime"))
 		{
 		function hrtime($bool) {return microtime($bool)*1000000000;}
-		} 
-	$ntest=array(1,2,3,25,33,44,48,49,50);		
-	$t=hrtime(true);
-	foreach ($testvectors->AES_GCM_SIV_tests as $test)
-		{	
-	
-		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
+		} 	
 		
+	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
+	$t=hrtime(true);
+	
+	foreach ($testvectors->AES_GCM_SIV_tests as $test)
+		{
+		echo "----------------------------------------TEST CASE ".++$n."\n\n";		
 		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
 				
 		$text	= $test->msg;
-		$A	= $test->aad;
+		$A	= $test->aad;	
 		$key	= $test->key;
 		$nonce	= $test->iv;
 		$tag	= $test->tag;
 		$result	= $test->ct;
 							
-	/**/	echo "Plaintext 		".$text."\n";
+		echo "Plaintext 		".$text."\n";
 		echo "AAD       		".$A."\n";
 		echo "Key       		".$key."\n";
 		echo "Nonce     		".$nonce."\n";			
 		echo "Tag       		".$tag."\n";
 		echo "Result    		".$result."\n\n";
 		
-		$x->init($key,$nonce);					
-		
-		$t1=hrtime(true);	
-		$C=$x->AES_GCM_SIV_encrypt($text,$A);
-		echo "Encryption takes ".((hrtime(true)-$t1)/1000000)." ms\n";	
-			
+		$x->init($key,$nonce,$A);							
+	
+		$C    = $x->AES_GCM_SIV_encrypt($text);	
 		$ctag = substr($C,-32);
-		$cres = $C;
 		
 		echo "Computed tag 	".$ctag."\n";
-		echo "Computed result ".$cres."\n";
-				
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n";/**/
-		
-		//$P = $x->AES_GCM_SIV_decrypt($C,$A);
-				
-		if ($ctag!=$tag or $cres!=$result)die("failed");
-															
+		echo "Computed result ".$C."\n";				
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n";
+			
+		if ($C!=$result)die("failed");
 		}
 	echo ((hrtime(true)-$t)/1000000)." ms";	
 	}
