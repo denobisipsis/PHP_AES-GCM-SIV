@@ -36,15 +36,15 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 class AES_GCM_SIV
 	{	
-	public $nonce,$block_bits,$p,$R,$mask0,$mask1,$H,$authkey,$enckey,$blength,$A; 
+	public $nonce,$block_bits,$p,$R,$mask0,$mask1,$mulX_GHASH,$authkey,$enckey,$blength,$A; 
 
-	function __construct($p="",$R="",$mask0="",$maks1="",$H="",$Y="")
+	function __construct($p="",$R="",$mask0="",$maks1="",$Y="")
 		{
 		$this->p 	= str_repeat("0",128);
 		$this->R 	= hexdec("e1");
 		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
 		$this->mask1 	= str_repeat("01111111",16);
-		$this->H	= pack("H*","40000000000000000000000000000000");
+		//$this->H	= pack("H*","40000000000000000000000000000000");
 		$this->Y	= str_repeat("\0",16);				
 		}
   	
@@ -57,7 +57,39 @@ class AES_GCM_SIV
 		$this->block_bits=strlen($key)*4;	
 		
 		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);
+
+		/*
+		mulX_GHASH is the multiplier for the input and is constructed from authkey
 		
+		authkey is then converted to an element of the galois binary field
+		
+		is the field element H and corresponds to mulX_GHASH(ByteReverse(H))
+		
+		POLYVAL(H, X_1, ..., X_n) =
+		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
+		   ByteReverse(X_n)))   
+		*/	
+				 
+		$mask0 = $this->mask0;
+		$mask1 = $this->mask1;
+						
+		$Xt = array_values(unpack("C*",$this->authkey));		
+		
+		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$Xt));
+		
+		$xLSB = $binX[7];				
+		$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+		if ($xLSB)
+			$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $this->R);
+		$H = $this->p^$binX;
+
+		$result="";foreach (str_split(bin2hex($H),2) as $z) $result.=$z[1];
+
+		$this->mulX_GHASH = strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));
+		
+		
+		/*****************************************************************/
+						
 		if (ctype_xdigit($A))	$A = pack("H*",$A);
 		list ($this->blength,$this->A) = $this->siv_pad($A);		
 		}
@@ -71,10 +103,8 @@ class AES_GCM_SIV
 				
 		list ($bl,$P) 	   = $this->siv_pad($P);
 					
-		$input = bin2hex($this->A.$P).$this->blength.$bl;
-						
-		$X   = $this->authkey.pack("H*",$input);	
-  		$Y   = $this->siv_xor_nonce($this->siv_polyval($X));						
+		$input = bin2hex($this->A.$P).$this->blength.$bl;							
+  		$Y   = $this->siv_xor_nonce($this->siv_polyval(pack("H*",$input)));						
 		$tag = $this->siv_tag($Y,$enckey);
 		
 		$blocks = str_split($P0,16);
@@ -117,12 +147,10 @@ class AES_GCM_SIV
 		list ($bl,$C)   = $this->siv_pad($plaintext);
 					
 		$input 		= bin2hex($this->A.$C).$this->blength.$bl;
-				
-		$X     		= $this->authkey.pack("H*",$input);												
-		$Y   		= $this->siv_xor_nonce($this->siv_polyval($X));						
+		$Y   		= $this->siv_xor_nonce($this->siv_polyval(pack("H*",$input)));						
 		$expected_tag 	= $this->siv_tag($Y,$enckey);
 		
-		if ($expected_tag!=$tag)die("fail");
+		if ($expected_tag!=$tag)die("Tag authentication failed");
 		  		
 		return bin2hex($plaintext);
 	    	}
@@ -154,38 +182,6 @@ class AES_GCM_SIV
 		if ($mod) $m.=str_repeat("\x0",16-$mod);							
 			
 		return [$blength,$m];		
-		}
-		
-	function siv_polyval($X)
-		{
-		/**		  
-		POLYVAL works modulo x^128 + x^127 + x^126 + x^121 + 1
-					    
-		Now GHASH and POLYVAL can be defined in terms of one another:
-
-		   Let mulX_GHASH be a function that takes a 16-byte string, converts it
-		   		   to an element of GHASH's field using GHASH's convention, multiplies
-		   		   it by x and converts back to a string
-				      
-		   Then,
-		   		
-		   POLYVAL(H, X_1, ..., X_n) =
-		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
-		   ByteReverse(X_n)))
-		   
-		   GHASH(mulX_GHASH(ByteReverse(H)) is $H = $this->gf128($Y ^ $X[$nblocks],$H);
-		   
-		   the rest is the do loop
-		*/
-			
-		$Y = $this->Y; 						
-		$X=str_split(strrev($X) , 16);				
-	        $nblocks = sizeof($X) - 1;		
-		$H = $this->gf128($Y ^ $X[$nblocks] , $this->H, 1);
-		
-	        do {$Y = $this->gf128($Y ^ $X[$nblocks-1] , $H);} while (--$nblocks>0);	    
-		
-  		return strrev($Y);		
 		}
 		
 	function siv_tag($Y,$enckey)
@@ -348,19 +344,50 @@ class AES_GCM_SIV
 				    
 				    dot(a,b) = convert(gf128_mul(ab, Ri, R))	
 		*/
-			
-	function gf128($X,$Y,$isH=0) 
+		
+	function siv_polyval($X)
+		{
+		/**		  
+		POLYVAL works modulo x^128 + x^127 + x^126 + x^121 + 1
+					    
+		Now GHASH and POLYVAL can be defined in terms of one another:
+
+		   Let mulX_GHASH be a function that takes a 16-byte string, converts it
+		   		   to an element of GHASH's field using GHASH's convention, multiplies
+		   		   it by x and converts back to a string
+				      
+		   Then,
+		   		
+		   POLYVAL(H, X_1, ..., X_n) =
+		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
+		   ByteReverse(X_n)))
+		   
+		   GHASH(mulX_GHASH(ByteReverse(H)) is $H = $this->gf128($Y ^ $X[$nblocks],$H);
+		   
+		   the rest is the do loop
+		*/
+		
+		$mulX_GHASH = $this->mulX_GHASH;	
+		$Y 	    = $this->Y; 						
+		$X 	    = str_split($X , 16);
+						
+	        $i = 0;												
+	        do {$Y = $this->gf128($Y ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
+		
+  		return strrev($Y);		
+		}
+					
+	function gf128($X,$Y) 
 		{
 		// dont waste cpu time - 1
 		
 		if ($X==$this->Y) 
 				return $X;	
-					
-		$Y = str_split($Y);		
+									
 		$X = array_reverse(array_values(unpack("C*",$X)));		
 		
-		$p = $this->p;				
-		$R = $this->R; // 0xe1		
+		$R = $this->R;
+		$p = $this->p;						
 		
 		// masks to fast shifting, oring and anding
 		
@@ -371,33 +398,24 @@ class AES_GCM_SIV
 		
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
 		
-		// dont waste cpu time - 2
+		$Y = str_split($Y);
 		
-		if ($isH)
-			{
-			$xLSB = $binX[7];				
-			$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-			if ($xLSB)
-				$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
-			$p^=$binX;			
+		for($i = 0; $i < 16; $i++) 
+			{			
+			$f = ord($Y[$i]);						
+			for ($m = 0; $m < 8; $m++)
+				{				 
+				if ($f & 0x80) 						
+					$p^=$binX;
+							 
+				$xLSB = $binX[7];				
+				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+				if ($xLSB)
+					$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+					
+			        $f <<=1;
+			        }				 			
 			}
-		else
-			for($i = 0; $i < 16; $i++) 
-				{			
-				$f = ord($Y[$i]);						
-				for ($m = 0; $m < 8; $m++)
-					{				 
-					if ($f & 0x80) 						
-						$p^=$binX;
-								 
-					$xLSB = $binX[7];				
-					$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-					if ($xLSB)
-						$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
-						
-				        $f <<=1;
-				        }				 			
-				}
 		
 		// restore pure binary form of p (=result)
 		
@@ -453,8 +471,11 @@ function check_AES_GCM_SIV()
 		echo "Result    		".$result."\n\n";
 		
 		$x->init($key,$nonce,$A);							
-	
+		
+		$t1=hrtime(true);
 		$C    = $x->AES_GCM_SIV_encrypt($text);	
+		echo ((hrtime(true)-$t1)/1000)." microsegundos\n";
+			
 		$ctag = substr($C,-32);
 		
 		echo "Computed tag 	".$ctag."\n";
@@ -463,7 +484,7 @@ function check_AES_GCM_SIV()
 	
 		if ($C!=$result)die("failed");
 		}
-	echo ((hrtime(true)-$t)/1000000)." ms";	
+	echo ((hrtime(true)-$t)/1000000000)." s";	
 	}
 
 check_AES_GCM_SIV();
