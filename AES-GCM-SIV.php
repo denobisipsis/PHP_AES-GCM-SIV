@@ -360,7 +360,7 @@ class AES_GCM_SIV
 		$X = array_reverse(array_values(unpack("C*",$X)));		
 		
 		$p = $this->p;				
-		$R = $this->R; // 0xe1
+		$R = $this->R; // 0xe1		
 		
 		// masks to fast shifting, oring and anding
 		
@@ -394,6 +394,7 @@ class AES_GCM_SIV
 					$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
 					if ($xLSB)
 						$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+						
 				        $f <<=1;
 				        }				 			
 				}
