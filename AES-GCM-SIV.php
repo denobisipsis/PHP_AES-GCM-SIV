@@ -1,5 +1,5 @@
 <?php
-/*
+/**
 *  Copyright I-2019 denobisipsis
 
 # FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
@@ -58,7 +58,7 @@ class AES_GCM_SIV
 		
 		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);
 
-		/*
+		/**
 		mulX_GHASH is the multiplier for the input and is constructed from authkey
 		
 		authkey is then converted to an element of the galois binary field
@@ -362,19 +362,19 @@ class AES_GCM_SIV
 		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
 		   ByteReverse(X_n)))
 		   
-		   GHASH(mulX_GHASH(ByteReverse(H)) is $H = $this->gf128($Y ^ $X[$nblocks],$H);
-		   
-		   the rest is the do loop
+		POLYVAL, then, multiplies each 16-block of X, converted to an element of the
+		Galois binary field, with mulX_GHASH(ByteReverse(H)),
+		which is the authkey converted to a such field
 		*/
 		
 		$mulX_GHASH = $this->mulX_GHASH;	
-		$Y 	    = $this->Y; 						
+		$GHASH 	    = $this->Y; 						
 		$X 	    = str_split($X , 16);
 						
 	        $i = 0;												
-	        do {$Y = $this->gf128($Y ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
+	        do {$GHASH = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
 		
-  		return strrev($Y);		
+  		return strrev($GHASH);		
 		}
 					
 	function gf128($X,$Y) 
