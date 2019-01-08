@@ -1,43 +1,33 @@
 <?php
-/**
+/*
 *  Copyright I-2019 denobisipsis
-*
-*  This program is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of the
-*  License, or (at your option) any later version.
-*
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-*  General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program; if not, write to the Free Software
-*  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-*  02111-1307 USA
-*
-#FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
 
-#USAGE for AES-GCM-SIV
+# FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
 
-$text	= "Hello World";
-$A	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
-$key	= "f901cfe8a69615a93fdf7a98cad48179";
-$nonce	= "6245709fb18853f68d833640";
+# USAGE 
 
-$x=new AES_GCM_SIV;				
-$x->init($key,$nonce);
-
-$C = $x->AES_GCM_SIV_encrypt($text,$A);
-
-$P = $x->AES_GCM_SIV_decrypt($C,$A);
-
-	THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
+	$text	= "Hello World";
+	$aad	= "7576f7028ec6eb5ea7e298342a94d4b202b370ef9768ec6561c4fe6b7e7296fa859c21";
+	$key	= "f901cfe8a69615a93fdf7a98cad48179";
+	$nonce	= "6245709fb18853f68d833640";
 	
-Support modes:
+	$x=new AES_GCM_SIV;
+	
+	$x->init($key,$nonce,$aad);
+	
+	$cipher	= $x->AES_GCM_SIV_encrypt($text);
+	
+	$text 	= $x->AES_GCM_SIV_decrypt($cipher);
 
-for AEAD_AES_128_GCM_SIV 
+THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
+
+# Support modes:
+
+	- AES Galois Counter Mode nonce misuse-resistant (GCM-SIV)
+	
+# License
+
+This code is placed in the public domain.
 
 https://eprint.iacr.org/2017/168.pdf
 
@@ -66,40 +56,38 @@ class AES_GCM_SIV
 		$this->nonce = $nonce;		
 		$this->block_bits=strlen($key)*4;	
 		
-		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);	
-					
-		if (ctype_xdigit($A)) $A = pack("H*",$A);
+		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);
+		
+		if (ctype_xdigit($A))	$A = pack("H*",$A);
 		list ($this->blength,$this->A) = $this->siv_pad($A);		
 		}
 				    			
 	function AES_GCM_SIV_encrypt($P)
-	    	{ 			    	
-	    	$authkey = $this->authkey;
-		$enckey  = $this->enckey;						
-		
+	    	{
+		$enckey = $this->enckey;		
 		if (ctype_xdigit($P)) $P = pack("H*",$P);
 				
 		$P0 = $P;
 				
-		$A=$this->A;
-		$blength=$this->blength;
-				
 		list ($bl,$P) 	   = $this->siv_pad($P);
 					
-		$input = bin2hex($A.$P).$blength.$bl;				
-		$X   = $authkey.pack("H*",$input);	
+		$input = bin2hex($this->A.$P).$this->blength.$bl;
+						
+		$X   = $this->authkey.pack("H*",$input);	
   		$Y   = $this->siv_xor_nonce($this->siv_polyval($X));						
 		$tag = $this->siv_tag($Y,$enckey);
-
-		$cblock = $this->siv_init_counter($tag); 
 		
-		$blocks = str_split($P0,16);		
-		$cipher = "";		
+		$blocks = str_split($P0,16);
+			
+		$cblock = $this->siv_init_counter($tag); 	
+		$n=sizeof($blocks);	
 		
-	        for ($i = 0; $i < sizeof($blocks); $i++) 
+		$cipher = openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[0];
+		
+	        for ($i = 1; $i < $n; $i++) 
 		    {
-		    $cipher.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[$i];
-		    $cblock = $this->siv_inc($cblock);  
+		    $cblock=$this->siv_inc($cblock);
+		    $cipher.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[$i];		    
 		    }
 		
 	        return bin2hex($cipher).$tag;
@@ -107,35 +95,32 @@ class AES_GCM_SIV
 
 	function AES_GCM_SIV_decrypt($C)
 	    	{  
-	    	$authkey = $this->authkey;
-		$enckey  = $this->enckey;
-				
-		if (ctype_xdigit($C))  $C = pack("H*",$C);
+		$enckey = $this->enckey;				
+		if (ctype_xdigit($C)) $C = pack("H*",$C);
 		
-		$tag = bin2hex(substr($C,-16));						
-		$C   = str_split(substr($C,0,-16),16);
+		$tag 	  = bin2hex(substr($C,-16));						
+		$blocks   = str_split(substr($C,0,-16),16);
 						
 		$cblock    = $this->siv_init_counter($tag);										
-		$plaintext = "";
+		$n=sizeof($blocks);
+		
+		$plaintext = openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[0];
 				
-	        for ($i = 0; $i < sizeof($C); $i++) 
-		    {	    
-		    $plaintext.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$C[$i];	    
-		    $cblock = $this->siv_inc($cblock);  
+	        for ($i = 1; $i < $n; $i++) 
+		    {
+		    $cblock=$this->siv_inc($cblock);	    
+		    $plaintext.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[$i];	 
 		    }
 		 
 		// now checking auth
-		 
-		$A=$this->A;
-		$blength=$this->blength;
 				
-		list ($bl,$C) 	   = $this->siv_pad($plaintext);
+		list ($bl,$C)   = $this->siv_pad($plaintext);
 					
-		$input = bin2hex($A.$C).$blength.$bl;		
-		$X     = $authkey.pack("H*",$input);			
-									
-		$S_s   = $this->siv_xor_nonce($this->siv_polyval($X));						
-		$expected_tag = $this->siv_tag($S_s,$enckey);
+		$input 		= bin2hex($this->A.$C).$this->blength.$bl;
+				
+		$X     		= $this->authkey.pack("H*",$input);												
+		$Y   		= $this->siv_xor_nonce($this->siv_polyval($X));						
+		$expected_tag 	= $this->siv_tag($Y,$enckey);
 		
 		if ($expected_tag!=$tag)die("fail");
 		  		
@@ -196,7 +181,7 @@ class AES_GCM_SIV
 		$Y = $this->Y; 						
 		$X=str_split(strrev($X) , 16);				
 	        $nblocks = sizeof($X) - 1;		
-		$H = $this->gf128($Y ^ $X[$nblocks],$this->H);
+		$H = $this->gf128($Y ^ $X[$nblocks] , $this->H, 1);
 		
 	        do {$Y = $this->gf128($Y ^ $X[$nblocks-1] , $H);} while (--$nblocks>0);	    
 		
@@ -364,16 +349,18 @@ class AES_GCM_SIV
 				    dot(a,b) = convert(gf128_mul(ab, Ri, R))	
 		*/
 			
-	function gf128($X,$Y) 
-		{	
-		if (bin2hex($X)=="00000000000000000000000000000000") return $this->Y;
+	function gf128($X,$Y,$isH=0) 
+		{
+		// dont waste cpu time - 1
 		
+		if ($X==$this->Y) 
+				return $X;	
+					
 		$Y = str_split($Y);		
-		$X = array_reverse(array_values(unpack("C*",$X)));
-		
+		$X = array_reverse(array_values(unpack("C*",$X)));		
 		
 		$p = $this->p;				
-		$R = $this->R; // 0xe1
+		$R = $this->R; // 0xe1		
 		
 		// masks to fast shifting, oring and anding
 		
@@ -383,27 +370,39 @@ class AES_GCM_SIV
 		// Work X in binary-string form binX
 		
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
-			
-		for($i = 0; $i < 16; $i++) 
-			{			
-			$f = ord($Y[$i]);						
-			for ($m = 0; $m < 8; $m++)
-				{				 
-				if ($f & 0x80) 
-					$p^=$binX;
-								 
-				$xLSB = $binX[7];				
-				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-				if ($xLSB)
-					$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
-			        $f <<=1;
-			        }				 			
+		
+		// dont waste cpu time - 2
+		
+		if ($isH)
+			{
+			$xLSB = $binX[7];				
+			$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+			if ($xLSB)
+				$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+			$p^=$binX;			
 			}
+		else
+			for($i = 0; $i < 16; $i++) 
+				{			
+				$f = ord($Y[$i]);						
+				for ($m = 0; $m < 8; $m++)
+					{				 
+					if ($f & 0x80) 						
+						$p^=$binX;
+								 
+					$xLSB = $binX[7];				
+					$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+					if ($xLSB)
+						$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
+						
+				        $f <<=1;
+				        }				 			
+				}
 		
 		// restore pure binary form of p (=result)
 		
 		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
-		
+
 		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
 	}
@@ -429,15 +428,15 @@ function check_AES_GCM_SIV()
 	if (!function_Exists("hrtime"))
 		{
 		function hrtime($bool) {return microtime($bool)*1000000000;}
-		} 	
-		
+		} 
+					
 	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
-	$t=hrtime(true);
 	
+	$t=hrtime(true);
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
 		{
 		echo "----------------------------------------TEST CASE ".++$n."\n\n";		
-		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
+		echo "------------------------------ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
 				
 		$text	= $test->msg;
 		$A	= $test->aad;	
@@ -460,8 +459,8 @@ function check_AES_GCM_SIV()
 		
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$C."\n";				
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n";
-			
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n\n";
+	
 		if ($C!=$result)die("failed");
 		}
 	echo ((hrtime(true)-$t)/1000000)." ms";	
