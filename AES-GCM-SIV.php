@@ -1,6 +1,21 @@
-<?
+<?php
 /**
 *  Copyright I-2019 denobisipsis
+*
+*  This program is free software; you can redistribute it and/or
+*  modify it under the terms of the GNU General Public License as
+*  published by the Free Software Foundation; either version 2 of the
+*  License, or (at your option) any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+*  General Public License for more details.
+*
+*  You should have received a copy of the GNU General Public License
+*  along with this program; if not, write to the Free Software
+*  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+*  02111-1307 USA
 *
 #AES-GCM-SIV code with each step explained for PHP 5 & 7
 
@@ -31,14 +46,16 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 class AES_GCM_SIV
 	{	
-	public $nonce,$K,$block_bits,$p,$R,$mask0,$mask1; 
+	public $nonce,$K,$block_bits,$p,$R,$mask0,$mask1,$H; 
 
-	function __construct($p="",$R="",$mask0="",$maks1="")
+	function __construct($p="",$R="",$mask0="",$maks1="",$H="",$Y="")
 		{
 		$this->p 	= str_repeat("0",128);
-		$this->R 	= pack("H*","11100001");
+		$this->R 	= hexdec("e1");
 		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
 		$this->mask1 	= str_repeat("01111111",16);
+		$this->H	= pack("H*","40000000000000000000000000000000");
+		$this->Y	= str_repeat("\0",16);				
 		}
   	
 	function init($K,$nonce)
@@ -174,11 +191,10 @@ class AES_GCM_SIV
 		   
 		   the rest is the do loop
 		*/		
-		$Y = str_repeat("\0",16); 		
-		$H  = pack("H*","40000000000000000000000000000000");				
+		$Y = $this->Y; 						
 		$X=str_split(strrev($X) , 16);				
 	        $nblocks = sizeof($X) - 1;		
-		$H = $this->gf128($Y ^ $X[$nblocks],$H);
+		$H = $this->gf128($Y ^ $X[$nblocks],$this->H);
 		
 	        do {$Y = $this->gf128($Y ^ $X[$nblocks-1] , $H);} while (--$nblocks>0);	    
 
@@ -186,7 +202,7 @@ class AES_GCM_SIV
 		}
 		
 	function siv_tag($Y,$enckey)
-		{		
+		{
 		return substr(bin2hex(openssl_encrypt($Y, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)),0,32);		
 		}
 		
@@ -264,7 +280,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) â€“ x
+		listed is such that the degree of f(x) – x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
@@ -361,24 +377,23 @@ class AES_GCM_SIV
 		
 		$mask0 = $this->mask0;
 		$mask1 = $this->mask1;
-		
+
 		// Work X in binary-string form binX
 		
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
-						
+			
 		for($i = 0; $i < 16; $i++) 
 			{			
 			$f = ord($Y[$i]);						
 			for ($m = 0; $m < 8; $m++)
 				{				 
-				if ($f & 0x80)
+				if ($f & 0x80) 
 					$p^=$binX;
 								 
 				$xLSB = $binX[7];				
 				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-				if ($xLSB)										 
-					 $binX = substr($binX,0,-8).bin2hex(pack("H*",substr($binX,-8))^ $R);				 
-														 				 
+				if ($xLSB)
+					$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
 			        $f <<=1;
 			        }				 			
 			}
@@ -396,7 +411,8 @@ function check_AES_GCM_SIV()
 	// https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html#rfc.status Appendix C. Test vectors
 	
 	ECHO "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
-
+	
+	
 	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
 
 	$x=new AES_GCM_SIV;
@@ -405,10 +421,11 @@ function check_AES_GCM_SIV()
 		{
 		function hrtime($bool) {return microtime($bool)*1000000000;}
 		} 
-		
+	$ntest=array(1,2,3,25,33,44,48,49,50);		
 	$t=hrtime(true);
 	foreach ($testvectors->AES_GCM_SIV_tests as $test)
-		{		
+		{	
+	
 		echo "----------------------------------------TEST CASE ".$test->tcId."\n\n";
 		
 		echo "---------------------------------------- ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
@@ -420,7 +437,7 @@ function check_AES_GCM_SIV()
 		$tag	= $test->tag;
 		$result	= $test->ct;
 							
-		echo "Plaintext 		".$text."\n";
+	/**/	echo "Plaintext 		".$text."\n";
 		echo "AAD       		".$A."\n";
 		echo "Key       		".$key."\n";
 		echo "Nonce     		".$nonce."\n";			
@@ -430,7 +447,7 @@ function check_AES_GCM_SIV()
 		$x->init($key,$nonce);					
 		
 		$t1=hrtime(true);	
-		$C = $x->AES_GCM_SIV_encrypt($text,$A);
+		$C=$x->AES_GCM_SIV_encrypt($text,$A);
 		echo "Encryption takes ".((hrtime(true)-$t1)/1000000)." ms\n";	
 			
 		$ctag = substr($C,-32);
@@ -439,10 +456,12 @@ function check_AES_GCM_SIV()
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$cres."\n";
 				
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C,$A)."\n";/**/
+		
+		//$P = $x->AES_GCM_SIV_decrypt($C,$A);
 				
-		if ($ctag!=$tag or $cres!=$result)
-			die("failed");														
+		if ($ctag!=$tag or $cres!=$result)die("failed");
+															
 		}
 	echo ((hrtime(true)-$t)/1000000)." ms";	
 	}
