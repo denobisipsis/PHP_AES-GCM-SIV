@@ -13,9 +13,9 @@
 	
 	$x->init($key,$nonce,$aad);
 	
-	$C = $x->AES_GCM_SIV_encrypt($text);
+	$cipher	= $x->AES_GCM_SIV_encrypt($text);
 	
-	$P = $x->AES_GCM_SIV_decrypt($C);
+	$text 	= $x->AES_GCM_SIV_decrypt($cipher);
 
 THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 
