@@ -19,7 +19,7 @@
 
 THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SIV()
 
-	computing time on x5690 PHP 7.3 x64
+# computing time on x5690 PHP 7.3 x64
 	
 https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.066638397 s
 	
