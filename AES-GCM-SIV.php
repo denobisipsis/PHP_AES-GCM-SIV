@@ -95,7 +95,7 @@ class AES_GCM_SIV
 	    	{
 		$enckey 	= $this->enckey;if (ctype_xdigit($P)) $P = pack("H*",$P);				
 		$blocks 	= str_split($P,16);
-		$n		=sizeof($blocks);				
+		$n		= sizeof($blocks);				
 		list($bl ,$P) 	= $this->siv_pad($P);					
 		$input  	= $this->A.$P.$this->blength.$bl;							
   		$Y      	= $this->siv_xor_nonce($this->siv_polyval($input));						
@@ -119,7 +119,7 @@ class AES_GCM_SIV
 		$tag 	  	= bin2hex(substr($C,-16));						
 		$blocks   	= str_split(substr($C,0,-16),16);						
 		$cblock 	= $this->siv_init_counter($tag);										
-		$n		=sizeof($blocks);		
+		$n		= sizeof($blocks);		
 		$plaintext = openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[0];
 				
 	        for ($i = 1; $i < $n; $i++) 
@@ -353,7 +353,7 @@ class AES_GCM_SIV
 		$X 	    = str_split($X , 16);
 						
 	        $i = 0;												
-	        do {$GHASH = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
+	        do {$GHASH  = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
 		
   		return strrev($GHASH);		
 		}
