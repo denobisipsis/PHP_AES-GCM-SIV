@@ -36,7 +36,7 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 class AES_GCM_SIV
 	{	
-	public $nonce,$block_bits,$p,$R,$mask0,$mask1,$mulX_GHASH,$authkey,$enckey,$blength,$A; 
+	public $nonce,$AESblock,$p,$R,$mask0,$mask1,$mulX_GHASH,$authkey,$enckey,$blength,$A; 
 
 	function __construct($p="",$R="",$mask0="",$maks1="",$Y="")
 		{
@@ -53,8 +53,8 @@ class AES_GCM_SIV
 		if (strlen($key)!=32 and strlen($key)!=64)
 			die("Key length should be 128 or 256 bits");
 
-		$this->nonce = $nonce;		
-		$this->block_bits=strlen($key)*4;	
+		$this->nonce     = $nonce;		
+		$this->AESblock	 = 'AES-'.(strlen($key)*4).'-ECB';	
 		
 		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);
 
@@ -69,16 +69,12 @@ class AES_GCM_SIV
 		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
 		   ByteReverse(X_n)))   
 		*/	
-				 
-		$mask0 = $this->mask0;
-		$mask1 = $this->mask1;
 						
-		$Xt = array_values(unpack("C*",$this->authkey));		
-		
+		$Xt   = array_values(unpack("C*",$this->authkey));				
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$Xt));
 		
 		$xLSB = $binX[7];				
-		$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+		$binX = "0".substr($binX,0,-1)&$this->mask1|substr($binX&$this->mask0,15);				
 		if ($xLSB)
 			$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $this->R);
 		$H = $this->p^$binX;
@@ -97,28 +93,21 @@ class AES_GCM_SIV
 				    			
 	function AES_GCM_SIV_encrypt($P)
 	    	{
-		$enckey = $this->enckey;		
-		if (ctype_xdigit($P)) $P = pack("H*",$P);
-				
-		$P0 = $P;
-				
-		list ($bl,$P) 	   = $this->siv_pad($P);
+		$enckey 	= $this->enckey;if (ctype_xdigit($P)) $P = pack("H*",$P);				
+		$blocks 	= str_split($P,16);
+		$n		= sizeof($blocks);				
+		list($bl ,$P) 	= $this->siv_pad($P);					
+		$input  	= $this->A.$P.$this->blength.$bl;							
+  		$Y      	= $this->siv_xor_nonce($this->siv_polyval($input));						
+		$tag    	= $this->siv_tag($Y,$enckey);							
+		$cblock 	= $this->siv_init_counter($tag); 	
 					
-		$input = bin2hex($this->A.$P).$this->blength.$bl;							
-  		$Y   = $this->siv_xor_nonce($this->siv_polyval(pack("H*",$input)));						
-		$tag = $this->siv_tag($Y,$enckey);
-		
-		$blocks = str_split($P0,16);
-			
-		$cblock = $this->siv_init_counter($tag); 	
-		$n=sizeof($blocks);	
-		
-		$cipher = openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[0];
+		$cipher = openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[0];
 		
 	        for ($i = 1; $i < $n; $i++) 
 		    {
 		    $cblock=$this->siv_inc($cblock);
-		    $cipher.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[$i];		    
+		    $cipher.=openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[$i];		    
 		    }
 		
 	        return bin2hex($cipher).$tag;
@@ -126,29 +115,24 @@ class AES_GCM_SIV
 
 	function AES_GCM_SIV_decrypt($C)
 	    	{  
-		$enckey = $this->enckey;				
-		if (ctype_xdigit($C)) $C = pack("H*",$C);
-		
-		$tag 	  = bin2hex(substr($C,-16));						
-		$blocks   = str_split(substr($C,0,-16),16);
-						
-		$cblock    = $this->siv_init_counter($tag);										
-		$n=sizeof($blocks);
-		
-		$plaintext = openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[0];
+		$enckey 	= $this->enckey;if (ctype_xdigit($C)) $C = pack("H*",$C);		
+		$tag 	  	= bin2hex(substr($C,-16));						
+		$blocks   	= str_split(substr($C,0,-16),16);						
+		$cblock 	= $this->siv_init_counter($tag);										
+		$n		= sizeof($blocks);		
+		$plaintext = openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[0];
 				
 	        for ($i = 1; $i < $n; $i++) 
 		    {
 		    $cblock=$this->siv_inc($cblock);	    
-		    $plaintext.=openssl_encrypt($cblock, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)^$blocks[$i];	 
+		    $plaintext.=openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[$i];	 
 		    }
 		 
 		// now checking auth
 				
-		list ($bl,$C)   = $this->siv_pad($plaintext);
-					
-		$input 		= bin2hex($this->A.$C).$this->blength.$bl;
-		$Y   		= $this->siv_xor_nonce($this->siv_polyval(pack("H*",$input)));						
+		list ($bl,$C)   = $this->siv_pad($plaintext);					
+		$input 		= $this->A.$C.$this->blength.$bl;
+		$Y   		= $this->siv_xor_nonce($this->siv_polyval($input));						
 		$expected_tag 	= $this->siv_tag($Y,$enckey);
 		
 		if ($expected_tag!=$tag)die("Tag authentication failed");
@@ -158,10 +142,9 @@ class AES_GCM_SIV
 		    
 	function derive_keys($key, $nonce) 
 		{
-		  $len = strlen($key);
-		  
-		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.=pack("H*","0$k"."000000".$nonce);		  				  
-		  $kenc=openssl_encrypt($keys, 'AES-'.$this->block_bits.'-ECB', pack("H*",$key), OPENSSL_RAW_DATA);
+		  $len = strlen($key);$nonce=pack("H*",$nonce);		  
+		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.=pack("H*","0$k"."000000").$nonce;		  				  
+		  $kenc=openssl_encrypt($keys, $this->AESblock, pack("H*",$key), OPENSSL_RAW_DATA);
 			  		  
 		  $authkey 	= substr($kenc,0,8).substr($kenc,16,8);
 		  $enckey 	= substr($kenc,32,8).substr($kenc,48,8);	
@@ -176,10 +159,8 @@ class AES_GCM_SIV
 		{
 		// max plaintext length 2**32 bits = 512 MBytes
 					
-		$blength=bin2hex(strrev(pack('N',strlen($m)*8)))."00000000";
-			
-		$mod=strlen($m)%16;
-						
+		$blength=strrev(pack('N',strlen($m)*8))."\0\0\0\0";	
+		$mod=strlen($m)%16;						
 		if ($mod) $m.=str_repeat("\x0",16-$mod);							
 			
 		return [$blength,$m];		
@@ -187,13 +168,12 @@ class AES_GCM_SIV
 		
 	function siv_tag($Y,$enckey)
 		{
-		return substr(bin2hex(openssl_encrypt($Y, 'AES-'.$this->block_bits.'-ECB', $enckey, OPENSSL_RAW_DATA)),0,32);		
+		return substr(bin2hex(openssl_encrypt($Y, $this->AESblock, $enckey, OPENSSL_RAW_DATA)),0,32);		
 		}
 		
 	function siv_xor_nonce($Y)
-		{	
-		$nonce=pack("H*",$this->nonce);	
-		$Y=substr_replace($Y,substr($Y,0,12)^$nonce,0,12);		
+		{				
+		$Y=substr_replace($Y,substr($Y,0,12)^pack("H*",$this->nonce),0,12);		
 		$Y[15]=pack("i",ord($Y[15]) & 0x7f);
 		return $Y; 		
 		}
@@ -373,7 +353,7 @@ class AES_GCM_SIV
 		$X 	    = str_split($X , 16);
 						
 	        $i = 0;												
-	        do {$GHASH = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
+	        do {$GHASH  = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
 		
   		return strrev($GHASH);		
 		}
@@ -414,7 +394,7 @@ class AES_GCM_SIV
 		
 		// restore pure binary form of p (=result), making a last xoring
 		
-		$result="";foreach (str_split(bin2hex($p^$binX),2) as $z) $result.=$z[1];
+		$result="";foreach (str_split(bin2hex($p^$binX),2) as $z) $result.=$z[1];		
 
 		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
@@ -483,7 +463,7 @@ function check_AES_GCM_SIV()
 		echo $x->AES_GCM_SIV_decrypt($C);
 		echo "\n\n";
 	
-		if ($C!=$result)die("failed");
+		if ($C!=$result)die("failed");			
 		}
 	echo ((hrtime(true)-$t)/1000000000)." s";	
 	}
