@@ -44,7 +44,7 @@ class AES_GCM_SIV
 		$this->R 	= hexdec("e1");
 		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
 		$this->mask1 	= str_repeat("01111111",16);
-		//$this->H	= pack("H*","40000000000000000000000000000000");
+		//$this->H	= pack("H*","40000000000000000000000000000000"); mulX_GHASH=gf128(authkey,H)
 		$this->Y	= str_repeat("\0",16);				
 		}
   	
@@ -84,9 +84,10 @@ class AES_GCM_SIV
 		$H = $this->p^$binX;
 
 		$result="";foreach (str_split(bin2hex($H),2) as $z) $result.=$z[1];
-
-		$this->mulX_GHASH = strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));
 		
+		// save cpu time: lasts 0's are irrelevant to compute mulX_GHASH
+		
+		$this->mulX_GHASH = rtrim(implode(array_reverse(str_split($result,8))),"0");		
 		
 		/*****************************************************************/
 						
@@ -377,7 +378,7 @@ class AES_GCM_SIV
   		return strrev($GHASH);		
 		}
 					
-	function gf128($X,$Y) 
+	function gf128($X,$binY) 
 		{
 		// dont waste cpu time - 1
 		
@@ -398,28 +399,22 @@ class AES_GCM_SIV
 		
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
 		
-		$Y = str_split($Y);
+		// last binY bit is always 1, so strlen($binY)-1
 		
-		for($i = 0; $i < 16; $i++) 
-			{			
-			$f = ord($Y[$i]);						
-			for ($m = 0; $m < 8; $m++)
-				{				 
-				if ($f & 0x80) 						
-					$p^=$binX;
-							 
-				$xLSB = $binX[7];				
-				$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
-				if ($xLSB)
-					$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);
-					
-			        $f <<=1;
-			        }				 			
+		for($i = 0; $i < strlen($binY)-1; $i++) 
+			{							 
+			if ($binY[$i]) 						
+				$p^=$binX;
+						 
+			$xLSB = $binX[7];				
+			$binX = "0".substr($binX,0,-1)&$mask1|substr($binX&$mask0,15);				
+			if ($xLSB)
+				$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);				 			
 			}
 		
-		// restore pure binary form of p (=result)
+		// restore pure binary form of p (=result), making a last xoring
 		
-		$result="";foreach (str_split(bin2hex($p),2) as $z) $result.=$z[1];
+		$result="";foreach (str_split(bin2hex($p^$binX),2) as $z) $result.=$z[1];
 
 		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
 		}		 
@@ -480,7 +475,9 @@ function check_AES_GCM_SIV()
 		
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$C."\n";				
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n\n";
+		echo "Computed dcrypt ";
+		echo $x->AES_GCM_SIV_decrypt($C);
+		echo "\n\n";
 	
 		if ($C!=$result)die("failed");
 		}
