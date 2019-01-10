@@ -332,7 +332,6 @@ class AES_GCM_SIV
 		POLYVAL works modulo x^128 + x^127 + x^126 + x^121 + 1
 					    
 		Now GHASH and POLYVAL can be defined in terms of one another:
-
 		   Let mulX_GHASH be a function that takes a 16-byte string, converts it
 		   		   to an element of GHASH's field using GHASH's convention, multiplies
 		   		   it by x and converts back to a string
@@ -347,25 +346,24 @@ class AES_GCM_SIV
 		Galois binary field, with mulX_GHASH(ByteReverse(H)),
 		which is the authkey converted to a such field
 		*/
-		
-		$mulX_GHASH = $this->mulX_GHASH;	
+					
 		$GHASH 	    = $this->Y; 						
 		$X 	    = str_split($X , 16);
 						
 	        $i = 0;												
-	        do {$GHASH  = $this->gf128($GHASH ^ strrev($X[$i]) , $mulX_GHASH);} while (++$i<sizeof($X));	    
+	        do $GHASH   = $this->gf128($GHASH ^ $X[$i]); 
+		while (++$i<sizeof($X));	    
 		
-  		return strrev($GHASH);		
+  		return $GHASH;		
 		}
 					
-	function gf128($X,$binY) 
+	function gf128($X) 
 		{
 		// dont waste cpu time - 1
 		
-		if ($X==$this->Y) 
-				return $X;	
-									
-		$X = array_reverse(array_values(unpack("C*",$X)));		
+		if ($X==$this->Y)return $X;	
+		
+		$binY = $this->mulX_GHASH;
 		
 		$R = $this->R;
 		$p = $this->p;						
@@ -374,9 +372,10 @@ class AES_GCM_SIV
 		
 		$mask0 = $this->mask0;
 		$mask1 = $this->mask1;
-
+		
 		// Work X in binary-string form binX
 		
+		$X    = array_values(unpack("C*",$X));
 		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
 		
 		// last binY bit is always 1, so strlen($binY)-1
@@ -395,8 +394,7 @@ class AES_GCM_SIV
 		// restore pure binary form of p (=result), making a last xoring
 		
 		$result="";foreach (str_split(bin2hex($p^$binX),2) as $z) $result.=$z[1];		
-
-		return strrev(implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8))));	
+		return implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8)));	
 		}		 
 	}
 
@@ -459,9 +457,7 @@ function check_AES_GCM_SIV()
 		
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$C."\n";				
-		echo "Computed dcrypt ";
-		echo $x->AES_GCM_SIV_decrypt($C);
-		echo "\n\n";
+		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n\n"; 
 	
 		if ($C!=$result)die("failed");			
 		}
