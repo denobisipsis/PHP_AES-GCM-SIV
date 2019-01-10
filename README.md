@@ -1,6 +1,7 @@
 *  Copyright I-2019 denobisipsis
 
 # FAST AES-GCM-SIV code with each step explained for PHP 5 & 7
+	Based on draft 9 https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 # USAGE 
 
