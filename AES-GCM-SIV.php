@@ -36,16 +36,21 @@ https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 class AES_GCM_SIV
 	{	
-	public $nonce,$AESblock,$p,$R,$mask0,$mask1,$mulX_GHASH,$authkey,$enckey,$blength,$A; 
+	public $nonce,$AESblock,$p,$R,$mask0,$mask1,$mulX_GHASH,$authkey,$enckey,$blength,$A,$hbin,$h2bin; 
 
-	function __construct($p="",$R="",$mask0="",$maks1="",$Y="")
+	function __construct($p="",$R="",$mask0="",$maks1="",$Y="",$hbin="",$h2bin="")
 		{
 		$this->p 	= str_repeat("0",128);
 		$this->R 	= hexdec("e1");
 		$this->mask0 	= str_repeat(sprintf("%08b",1),16);
 		$this->mask1 	= str_repeat("01111111",16);
-		//$this->H	= pack("H*","40000000000000000000000000000000"); mulX_GHASH=gf128(authkey,H)
-		$this->Y	= str_repeat("\0",16);				
+		$this->Y	= str_repeat("\0",16);	
+		$this->hbin=$this->h2bin=array();
+		for ($k=0;$k<16;$k++) 
+			{
+			$this->hbin[$k]=sprintf("%04b",$k);
+			$this->h2bin[$this->hbin[$k]]=dechex($k);
+			}			
 		}
   	
 	function init($key,$nonce,$A="")
@@ -57,21 +62,8 @@ class AES_GCM_SIV
 		$this->AESblock	 = 'AES-'.(strlen($key)*4).'-ECB';	
 		
 		list ($this->authkey,$this->enckey) = $this->derive_keys($key,$nonce);
-
-		/**
-		mulX_GHASH is the multiplier for the input and is constructed from authkey
-		
-		authkey is then converted to an element of the galois binary field
-		
-		is the field element H and corresponds to mulX_GHASH(ByteReverse(H))
-		
-		POLYVAL(H, X_1, ..., X_n) =
-		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
-		   ByteReverse(X_n)))   
-		*/	
-						
-		$Xt   = array_values(unpack("C*",$this->authkey));				
-		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$Xt));
+										
+		$binX = str_replace($this->h2bin,$this->hbin,bin2hex($this->authkey));
 		
 		$xLSB = $binX[7];				
 		$binX = "0".substr($binX,0,-1)&$this->mask1|substr($binX&$this->mask0,15);				
@@ -85,7 +77,7 @@ class AES_GCM_SIV
 		
 		$this->mulX_GHASH = rtrim(implode(array_reverse(str_split($result,8))),"0");		
 		
-		/*****************************************************************/
+		/*******************************************************************************/
 						
 		if (ctype_xdigit($A))	$A = pack("H*",$A);
 		list ($this->blength,$this->A) = $this->siv_pad($A);		
@@ -101,13 +93,13 @@ class AES_GCM_SIV
   		$Y      	= $this->siv_xor_nonce($this->siv_polyval($input));						
 		$tag    	= $this->siv_tag($Y,$enckey);							
 		$cblock 	= $this->siv_init_counter($tag); 	
-					
-		$cipher = openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[0];
+		
+		$cipher  	= openssl_encrypt($cblock, $this->AESblock, $enckey, 1)^$blocks[0];	
 		
 	        for ($i = 1; $i < $n; $i++) 
 		    {
 		    $cblock=$this->siv_inc($cblock);
-		    $cipher.=openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[$i];		    
+		    $cipher.=openssl_encrypt($cblock, $this->AESblock, $enckey, 1)^$blocks[$i];		    
 		    }
 		
 	        return bin2hex($cipher).$tag;
@@ -119,13 +111,14 @@ class AES_GCM_SIV
 		$tag 	  	= bin2hex(substr($C,-16));						
 		$blocks   	= str_split(substr($C,0,-16),16);						
 		$cblock 	= $this->siv_init_counter($tag);										
-		$n		= sizeof($blocks);		
-		$plaintext = openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[0];
+		$n		= sizeof($blocks);
+				
+		$plaintext 	= openssl_encrypt($cblock, $this->AESblock, $enckey, 1)^$blocks[0];
 				
 	        for ($i = 1; $i < $n; $i++) 
 		    {
 		    $cblock=$this->siv_inc($cblock);	    
-		    $plaintext.=openssl_encrypt($cblock, $this->AESblock, $enckey, OPENSSL_RAW_DATA)^$blocks[$i];	 
+		    $plaintext.=openssl_encrypt($cblock, $this->AESblock, $enckey, 1)^$blocks[$i];	 
 		    }
 		 
 		// now checking auth
@@ -144,7 +137,7 @@ class AES_GCM_SIV
 		{
 		  $len = strlen($key);$nonce=pack("H*",$nonce);		  
 		  $keys="";for ($k=0;$k<(($len+1)*3)/32;$k++) $keys.=pack("H*","0$k"."000000").$nonce;		  				  
-		  $kenc=openssl_encrypt($keys, $this->AESblock, pack("H*",$key), OPENSSL_RAW_DATA);
+		  $kenc=openssl_encrypt($keys, $this->AESblock, pack("H*",$key), 1);
 			  		  
 		  $authkey 	= substr($kenc,0,8).substr($kenc,16,8);
 		  $enckey 	= substr($kenc,32,8).substr($kenc,48,8);	
@@ -158,7 +151,7 @@ class AES_GCM_SIV
 	function siv_pad($m)
 		{
 		// max plaintext length 2**32 bits = 512 MBytes
-					
+		
 		$s=strlen($m);			
 		$blength=pack('L',$s*8)."\0\0\0\0";
 	
@@ -170,7 +163,7 @@ class AES_GCM_SIV
 		
 	function siv_tag($Y,$enckey)
 		{
-		return substr(bin2hex(openssl_encrypt($Y, $this->AESblock, $enckey, OPENSSL_RAW_DATA)),0,32);		
+		return substr(bin2hex(openssl_encrypt($Y, $this->AESblock, $enckey, 1)),0,32);		
 		}
 		
 	function siv_xor_nonce($Y)
@@ -182,7 +175,7 @@ class AES_GCM_SIV
 		
 	function siv_init_counter($tag)
 		{
-		return strrev(strrev(pack("H*",$tag))|"\x80");		
+		return strrev(strrev(pack("H*",$tag))|"\x80");			
 		}
 		
 	function siv_inc($counter)
@@ -191,169 +184,19 @@ class AES_GCM_SIV
 			{
 		        $temp = substr($counter, -$j, 4);
 	                extract(unpack('Lcount', $temp));		
-	                $long=pack('L', $count+1);
-			$counter = substr_replace($counter, $long, -$j, 4);			
+			$counter = substr_replace($counter, pack('L', $count+1), -$j, 4);			
 			if ($temp!=0xFFFFFFFF and $temp!=0xFFFFFF7F) return $counter;				
 		        }
 		return $counter;				
 		}
-						
-		/**
-		6.3 Multiplication Operation on Blocks 
-		
-		https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf#11-12
-		
-		Algorithm 1: X ?Y
-		Input:
-		blocks X, Y.
-		Output:
-		block X ?Y.
-		
-		Steps:
-		1. Let x0x1...x127 denote the sequence of bits in X.
-		2. Let Z0 = 0128 and V0 = Y.
-		3. For i = 0 to 127, calculate blocks Zi+1 and Vi+1 as follows:
-	
-			Zi+1 =
-		 		if xi = 0;
-					Zi
-		 		if xi =1.
-				 	Zi ^ Vi
-	
-			Vi+1 = 
-				Vi >>1 		if LSB1(Vi) = 0;
-		 		Vi >>1 ^ R 	if LSB1(Vi) = 1.
-	
-		
-		4. Return Z128.
-		
-		As you see is better
-			Zi+1 =  Zi ^ Vi		if xi =1
-			Vi+1 = 
-				Vi >>1 		
-		 		Vi ^ R 		if LSB1(Vi) = 1
-				 
-		for s=1 special case
-		
-		Constant R dependes on algebraical analysis.
-		See http://www.hpl.hp.com/techreports/98/HPL-98-135.pdf
-		
-		A table of low-weight irreducible polynomials over the
-		finite field F2 is presented. For each integer n in the
-		range 2 = n = 10,000, a binary irreducible polynomial
-		f(x) of degree n and minimum posible weight is listed.
-		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) – x
-		n is lowest
-		(similarly, subsequent lower degrees are minimized in
-		case of ties). 
-					
-		- for 128 bits 128,7,2,1 -> x^128 + x^7 + x^2 + x^1 + 1 
-		
-			generator for the isomorphism of GF(2^128)
-			equivalent to the bit vector (1 || 120"0" || 10000111). (only exponents below 8)
-			(
-			Where each bit reflects a power of "x" appearing in the polynomial.
-			i.e.: b7-b6-b5-b4 b3-b2-b1-b0
-			      1   0  0  0  0  1  1  1
-			)
-			
-			10000111 is 0xE1 (little-endian fashion) or 0x87 (big-endian)
-			
-		- for 8 bits     8,4,3,1 -> x^8   + x^4 + x^3 + x^1 + 1 (1=x^0)
-			generator for the isomorphism of GF(2^8)
-			(
-			i.e.: b7-b6-b5-b4 b3-b2-b1-b0
-			      0   0  0  1  1  0  1  1
-			)
-			
-			00011011 is 0xD8 (little-endian fashion) or 0x1B (big-endian)	
-			
-		The main process equals to 
-		
-				        $X[$s]>>=1;							
-	 			        for($j=1;$j<=$s;$j++)
-	 			            {			
-	 			            if ($X[$s-$j] & 1)					    	 
-	 					    $X[$s-$j+1] |= 0x80;
-	 			            $X[$s-$j]>>=1;          
-	 			            }
-					     
-				but as implemented here is faster
-				
-				explanans:
-				
-				1- "0".substr($binX,0,-1)  this equals to $binX >> 1
-				2- & mask1 flip first bit after shifting (must be 0)
-				3- substr($binX&$mask0,15) this saves highbit from all uint8 and alineates from 15 => if ($X[$s-$j] & 1) $X[$s-$j+1] |= 0x80;
-				4- make "or" from the 2 results above  
-				
-				http://chris-wood.github.io/2016/12/25/GCM-SIV.html have a python implementation with theoretical
-				
-				    ''' dot operation using the irreducible polynomials R and Ri(=R^{-1}).
-				    We convert the input elements to their proper field representation
-				    for the standard multiplication algorithm to work as is.
-				    Compute: a * b * Ri
-				    R    = x^128 + x^127 + x^126 + x^121 + 1 = 0x010000000000000000000000000000C2
-				    R^-1 = x^127 + x^124 + x^121 + x^114 + 1 = 0x01000000000000000000000000000492
-				    '''
-				
-				Then, dot(a,b)=$this->siv_polyval($X) (X=a.b)
-				
-				My implementation (gf128 uses standard R = 0xE1)
-				 		
-					$H  = pack("H*","40000000000000000000000000000000");
-									
-					$X=str_split(strrev($X) , 16);	
-					
-					a = $X[1]
-					b = $X[0]			
-				
-					$H = $this->gf128(a , $H);
-					
-				        $Y = $this->gf128(b , $H);	    
-					
-					dot(a,b) = bin2hex(strrev($Y));
-				
-				but original dot appears as
-				
-				    R  = convert(0x010000000000000000000000000000C2)
-				    Ri = convert(0x01000000000000000000000000000492)
-				    
-				    a_poly = convert(to_hex(a))
-				    b_poly = convert(to_hex(b))
-				    
-				    ab     = gf128_mul(a_poly, b_poly, R)
-				    
-				    dot(a,b) = convert(gf128_mul(ab, Ri, R))	
-		*/
 		
 	function siv_polyval($X)
-		{
-		/**		  
-		POLYVAL works modulo x^128 + x^127 + x^126 + x^121 + 1
-					    
-		Now GHASH and POLYVAL can be defined in terms of one another:
-		   Let mulX_GHASH be a function that takes a 16-byte string, converts it
-		   		   to an element of GHASH's field using GHASH's convention, multiplies
-		   		   it by x and converts back to a string
-				      
-		   Then,
-		   		
-		   POLYVAL(H, X_1, ..., X_n) =
-		   ByteReverse(GHASH(mulX_GHASH(ByteReverse(H)), ByteReverse(X_1), ...,
-		   ByteReverse(X_n)))
-		   
-		POLYVAL, then, multiplies each 16-block of X, converted to an element of the
-		Galois binary field, with mulX_GHASH(ByteReverse(H)),
-		which is the authkey converted to a such field
-		*/
-					
-		$GHASH 	    = $this->Y; 						
+		{					
+		$GHASH 	    = $this->Y; 					
 		$X 	    = str_split($X , 16);
-						
+											
 	        $i = 0;												
-	        do $GHASH   = $this->gf128($GHASH ^ $X[$i]); 
+	        do $GHASH   = $this->gf128($GHASH ^ $X[$i]);		
 		while (++$i<sizeof($X));	    
 		
   		return $GHASH;		
@@ -365,21 +208,20 @@ class AES_GCM_SIV
 		
 		if ($X==$this->Y)return $X;	
 		
-		$binY = $this->mulX_GHASH;
+		$binY 	= $this->mulX_GHASH;
 		
-		$R = $this->R;
-		$p = $this->p;						
+		$R 	= $this->R;
+		$p 	= $this->p;						
 		
 		// masks to fast shifting, oring and anding
 		
 		$mask0 = $this->mask0;
-		$mask1 = $this->mask1;
+		$mask1 = $this->mask1;						
 		
 		// Work X in binary-string form binX
-		
-		$X    = array_values(unpack("C*",$X));
-		$binX = implode(array_map(function($v) {return sprintf('%08b', $v);},$X));
-		
+
+		$binX = str_replace($this->h2bin,$this->hbin,bin2hex($X));
+
 		// last binY bit is always 1, so strlen($binY)-1
 		
 		for($i = 0; $i < strlen($binY)-1; $i++) 
@@ -396,8 +238,8 @@ class AES_GCM_SIV
 		// restore pure binary form of p (=result), making a last xoring
 		
 		$result="";foreach (str_split(bin2hex($p^$binX),2) as $z) $result.=$z[1];		
-		return implode(array_map(function($v) {return chr(bindec($v));},str_split($result,8)));	
-		}		 
+		return pack("H*",implode(array_map(function($v) {return $this->h2bin[$v];},str_split($result,4))));	
+		}				 
 	}
 
 function check_AES_GCM_SIV()
@@ -407,15 +249,15 @@ function check_AES_GCM_SIV()
 	/*
 	computing time on x5690 PHP 7.3 x64
 	
-	https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.066638397 s
+	https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.061416294 s
 	
 	more test vectors
 	
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json	 0.032399288 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json	 0.032478945 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json	12.466323083 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	12.696136788 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 3.921313775 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json	 0.029763509 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json	 0.029917493 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json	11.699118199 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	11.958636688 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 3.448539424 s
 	*/
 	
 	ECHO "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
@@ -430,10 +272,10 @@ function check_AES_GCM_SIV()
 	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json"));
 	
 	$t=hrtime(true);
-	foreach ($testvectors->AES_GCM_SIV_tests as $test)
+	foreach ($testvectors->AES_GCM_SIV_tests  as $test)
 		{
-		echo "----------------------------------------TEST CASE ".++$n."\n\n";		
-		echo "------------------------------ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
+		//echo "----------------------------------------TEST CASE ".++$n."\n\n";		
+		//echo "------------------------------ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
 				
 		$text	= $test->msg;
 		$A	= $test->aad;	
@@ -442,24 +284,25 @@ function check_AES_GCM_SIV()
 		$tag	= $test->tag;
 		$result	= $test->ct;
 							
-		echo "Plaintext 		".$text."\n";
+		/*echo "Plaintext 		".$text."\n";
 		echo "AAD       		".$A."\n";
 		echo "Key       		".$key."\n";
 		echo "Nonce     		".$nonce."\n";			
 		echo "Tag       		".$tag."\n";
-		echo "Result    		".$result."\n\n";
+		echo "Result    		".$result."\n\n";*/
 		
 		$x->init($key,$nonce,$A);							
 		
-		$t1=hrtime(true);
-		$C    = $x->AES_GCM_SIV_encrypt($text);	
-		echo ((hrtime(true)-$t1)/1000)." microsegundos\n";
+		//$t1=hrtime(true);
+		$D = $x->AES_GCM_SIV_decrypt($C = $x->AES_GCM_SIV_encrypt($text));	
+		/*echo ((hrtime(true)-$t1)/1000)." microsegundos\n";
 			
 		$ctag = substr($C,-32);
 		
 		echo "Computed tag 	".$ctag."\n";
 		echo "Computed result ".$C."\n";				
-		echo "Computed dcrypt ".$x->AES_GCM_SIV_decrypt($C)."\n\n"; 
+		echo "Computed dcrypt ".$D."\n\n"; */
+		
 	
 		if ($C!=$result)die("failed");			
 		}
