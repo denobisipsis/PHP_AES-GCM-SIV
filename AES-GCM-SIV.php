@@ -159,8 +159,10 @@ class AES_GCM_SIV
 		{
 		// max plaintext length 2**32 bits = 512 MBytes
 					
-		$blength=strrev(pack('N',strlen($m)*8))."\0\0\0\0";	
-		$mod=strlen($m)%16;						
+		$s=strlen($m);			
+		$blength=pack('L',$s*8)."\0\0\0\0";
+	
+		$mod=$s%16;						
 		if ($mod) $m.=str_repeat("\x0",16-$mod);							
 			
 		return [$blength,$m];		
@@ -187,11 +189,11 @@ class AES_GCM_SIV
 		{
 	        for ($j = 16; $j >= 4; $j-=4) 
 			{
-		        $temp = strrev(substr($counter, -$j, 4));
-	                extract(unpack('Ncount', $temp));		
-	                $long=pack('N', $count+1);
-			$counter = substr_replace($counter, strrev($long), -$j, 4);			
-			if ($temp!=0xFFFFFFFF and $temp!=0x7FFFFFFF) return $counter;				
+		        $temp = substr($counter, -$j, 4);
+	                extract(unpack('Lcount', $temp));		
+	                $long=pack('L', $count+1);
+			$counter = substr_replace($counter, $long, -$j, 4);			
+			if ($temp!=0xFFFFFFFF and $temp!=0xFFFFFF7F) return $counter;				
 		        }
 		return $counter;				
 		}
@@ -241,7 +243,7 @@ class AES_GCM_SIV
 		range 2 = n = 10,000, a binary irreducible polynomial
 		f(x) of degree n and minimum posible weight is listed.
 		Among those of minimum weight, the polynomial
-		listed is such that the degree of f(x) – x
+		listed is such that the degree of f(x) â€“ x
 		n is lowest
 		(similarly, subsequent lower degrees are minimized in
 		case of ties). 
