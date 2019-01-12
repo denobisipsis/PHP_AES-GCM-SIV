@@ -68,10 +68,7 @@ Also dot can be simplified
 Compare speeds
 ;*/
 	function convert($x) 
-		{ 
-		/*
-
-		*/		
+		{ 		
 		$poly = 0;
 		    for ($b=0;$b<16;$b++)
 		    	{
