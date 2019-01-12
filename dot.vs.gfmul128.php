@@ -1,5 +1,5 @@
 <?
-/**
+/*
 from draft https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html
 
 Polynomials in this document will be written as 16-byte values. 
@@ -66,7 +66,7 @@ Also dot can be simplified
 		3- r=mul a,b mod R
 		
 Compare speeds
-;*/
+*/
 	function convert($x) 
 		{ 		
 		$poly = 0;
@@ -109,7 +109,7 @@ Compare speeds
 	 
 	function dot($a,$b)
 		{ 
-		/**
+		/*
 		mod R=0x010000000000000000000000000000C2
 		
 		convert elements
@@ -135,7 +135,7 @@ Compare speeds
 
 	function dot2($a,$b)
 		{   
-		/**
+		/*
 		simplified dot
 		
 		no need to convert 
@@ -181,7 +181,7 @@ Compare speeds
 		
 		$Y=pack("H*",$Y)^str_repeat("\0",16);;
 		
-		/**
+		/*
 		Convert Y to an element of the binary galois field
 		
 		same as dot2 -> $b = gf128_dot(u128_dec($b) , $H, $R);
@@ -219,7 +219,7 @@ Compare speeds
 				$binX = substr($binX,0,-8).decbin(bindec(substr($binX,-8)) ^ $R);				 			
 			}
 		
-		/**
+		/*
 		restore pure binary form of p (=result), making a last xoring
 		
 		same as dot2 -> $r  = gf128_dot($a , $b, $R);
