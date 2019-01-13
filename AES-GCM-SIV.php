@@ -194,20 +194,15 @@ class AES_GCM_SIV
 		
 	function siv_polyval($X)
 		{
-		// Work in binary-string form
-							
+		// Work in binary-string form							
 		$GHASH	= $p2 = $this->p;
 		$hbin	= $this->hbin;
 		$h2bin	= $this->h2bin;				
 		$X      = str_split(str_replace($h2bin,$hbin,$X), 128);	
-		$binY 	= $this->mulX_GHASH;	
-		
-		// last binY bit is always 1, so strlen($binY)-1
-						
-		$lbinY  = strlen($binY)-1;
-		
-		// masks to fast shifting, oring and anding
-		
+		$binY 	= $this->mulX_GHASH;			
+		// last binY bit is always 1, so strlen($binY)-1						
+		$lbinY  = strlen($binY)-1;		
+		// masks to fast shifting, oring and anding		
 		$mask0  = $this->mask0;
 		$mask1  = $this->mask1;
 																	
@@ -219,10 +214,8 @@ class AES_GCM_SIV
 			
 			if (($GHASH=$binX)!="0")
 				{
-				// gf128
-				
-				$p = $p2;
-									
+				// gf128				
+				$p = $p2;									
 				for($j=0; $j < $lbinY; $j++) 
 					{							 
 					if ($binY[$j]) 						
@@ -237,9 +230,7 @@ class AES_GCM_SIV
 				}
 			}		
 		while   (++$i<sizeof($X));
-
-		// restore pure binary form of GHASH
-						
+		// restore pure binary form of GHASH						
 		$temp  = "";foreach (str_split(bin2hex($GHASH),2) as $z) $temp.=$z[1];
 		$GHASH = "";foreach (str_split($temp,4) as $z) $GHASH.=$h2bin[$z];
 		return pack("H*",$GHASH);	
