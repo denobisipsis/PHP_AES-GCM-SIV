@@ -325,11 +325,9 @@ class Galois128
 		   
 		   mulX_GHASH(ByteReverse(H)) = dcbaa5dd137c188ebb21492c23c9b112
 		*/
-
-		$p     = str_repeat("0",128);								
+								
 		$binX  = $this->mul($this->bstr($X));
-
-		return $this->reverse($this->bstrtohex($p^$binX));		
+		return $this->reverse($this->bstrtohex($binX));		
 		}
 
 	function dot_siv_ghash($X,$Y)
