@@ -37,6 +37,28 @@ THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SI
 
 	- AES Galois Counter Mode nonce misuse-resistant (GCM-SIV)
 	
+# Adenda--> dot.vs.gfmul128.php
+
+COMPUTING ON GALOIS 128-FIELDS
+
+Functions coded:
+
+as defined in https://www.intel.cn/content/dam/www/public/us/en/documents/white-papers/carry-less-multiplication-instruction-in-gcm-mode-paper.pdf	
+
+	- PCLMULQDQ 	
+	- GFMUL     
+
+and as defined in https://www.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.txt
+	
+	- mulX_POLYVAL 	
+	- mulX_GHASH 	
+	
+	- dot_siv_ghash
+	- dot_siv_polyval (in binary mode, fastest)
+	
+	- dot_big_math (using longs longs mode 1)
+	- dot2         (using longs longs mode 2, faster)
+	
 # License
 
 This code is placed in the public domain.
