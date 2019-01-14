@@ -39,6 +39,8 @@ THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SI
 	
 # Adenda--> dot.vs.gfmul128.php
 
+https://github.com/denobisipsis/PHP_AES-GCM-SIV/blob/master/dot.vs.gfmul128.php
+
 COMPUTING ON GALOIS 128-FIELDS
 
 Functions coded:
