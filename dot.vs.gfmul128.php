@@ -252,6 +252,8 @@ class Galois128
 		rbits =  Reflecting Bits 
 		
 		PCLMULQDQ (a, b) = rbits(GFMUL (rbits(a),rbits(b))) 
+		
+		with reduction
 		*/
 
 		$p     = str_repeat("0",128);						
