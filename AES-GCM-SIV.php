@@ -318,7 +318,7 @@ function check_AES_GCM_SIV()
 		echo "Computed result ".$C."\n";				
 		echo "Computed dcrypt ".$D."\n\n"; */		
 	
-		//if (bin2hex($C)!=$result)die("failed");					
+		if (bin2hex($C)!=$result)die("failed");					
 		}
 	echo ((hrtime(true)-$t)/1000000000)." s";
 	}
