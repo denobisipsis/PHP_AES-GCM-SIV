@@ -225,7 +225,7 @@ class AES_GCM_SIV
  					    $Lx[$k-1] |= 0x80000000;
  			            $Lx[$k]>>=1;          
  			            }
-				if ($xLSB & 1) $Lx[3]^=0xe1000000;			
+				if ($xLSB & 1) $Lx[3] ^= 0xe1000000;			
 				}
 			
 			for ($k=0;$k<4;$k++) $p[$k]^=$Lx[$k];
