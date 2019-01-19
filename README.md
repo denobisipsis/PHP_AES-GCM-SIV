@@ -32,7 +32,7 @@ THERE IS A VECTOR-TEST to validate THIS AES-GCM-SIV, SIMPLY RUN check_AES_GCM_SI
 	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	 1.884995769 s
 	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 1.092802567 s
 	
-	Encryption time average 100 µs (16 byte block)
+	Encryption time average 31.5 µs (16 byte block) / 500 Kb /s
 
 	
 # Support modes:
