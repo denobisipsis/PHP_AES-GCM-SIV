@@ -179,7 +179,7 @@ class AES_GCM_SIV
 			extract(unpack('Lcount', $temp));
 			$counter = substr_replace($counter, pack('L', $count+1), $j, 4);
 			$final_counter.=$counter;				
-			if ($temp==pack('H*', 'feffffff')) 
+			if ($temp==pack('H*', 'ffffffff')) 
 				{
 				$j+=4;				
 				if ($j>12) break;										
