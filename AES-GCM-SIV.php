@@ -196,20 +196,19 @@ class AES_GCM_SIV
 		3- Encrypt result to return the tag
 		http://src.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/common/crypto/modes/gcm.c#46 (Copyright 2009 Sun Microsystems, Inc.) 
 		OpenSolaris “gfmul” C Function
-		*/		
-		$X      = str_split(pack("H*",$X),16);				
+		*/	
+		
+		$Uints  = unpack('P*',pack("H*",$X));				
 		$binY 	= $this->mulX_GHASH;									
 		$lbinY  = $this->sY;
-		$sX	= sizeof($X);				
-		$pH	= $pL = 0;
-		$lH 	= $lL = 0;
-	        $i = 0;				
-	        do 	
+		$sX	= sizeof($Uints);						
+		$lH 	= $lL = 0;	
+					
+	        for($i = 1; $i < $sX; $i+=2) 	
 			{
-			$uint64  = unpack('P*',$X[$i]);	
-
-			$lH 	^= $uint64[1];
-			$lL 	^= $uint64[2];
+			$lH 	^= $Uints[$i];
+			$lL 	^= $Uints[$i+1];
+			$pH	 = $pL = 0;
 													
 			for($j = 0; $j < $lbinY; $j++) 
 				{							 
@@ -219,17 +218,14 @@ class AES_GCM_SIV
 				
 				$xLSB = $lH;	 				
 				$lH   = ($lL << 63)|(($lH >> 1) & PHP_INT_MAX);
-				$lL   = ($lL >> 1 ) & PHP_INT_MAX;
+				$lL   = ($lL >> 1 ) 		& PHP_INT_MAX;
 				if ($xLSB & 1) 
 					$lL 	^= 0xe100000000000000;
 				}
 				
 			$lH 	^=$pH;
 			$lL 	^=$pL;
-	
-			$pH  	 = $pL = 0;
-			}		
-		while   (++$i<$sX);
+			}	
 
 		// xor polyval
 
