@@ -80,9 +80,8 @@ class AES_GCM_SIV
 		$this->enckey	=$enckey;
 			  		
 		// Compute mulX_GHASH **********************************************************/
-											
-		$binX = str_replace($this->h2bin,$this->hbin,bin2hex($authkey));
-		    		
+		 
+		$binX = str_replace($this->h2bin,$this->hbin,bin2hex($authkey));				    		
 		$xLSB = $binX[7];				
 		$binX = "0".substr($binX,0,-1)&$this->mask1|substr($binX&$this->mask0,15);				
 		if ($xLSB)
@@ -95,7 +94,7 @@ class AES_GCM_SIV
 			}
 			// save cpu time: lasts 0's are irrelevant to use mulX_GHASH
 				
-		else   $result = implode(array_reverse(str_split($binX,8)));		
+		else   $result = implode(array_reverse(str_split($binX,8)));	
 	
 		$this->mulX_GHASH = rtrim($result,"0");	
 		$this->sY	  = strlen($this->mulX_GHASH)-1;
@@ -195,6 +194,8 @@ class AES_GCM_SIV
 		1- Computes Polyval = gfmul($X,mulX_GHASH)
 		2- Xors Polyval
 		3- Encrypt result to return the tag
+		http://src.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/common/crypto/modes/gcm.c#46 (Copyright 2009 Sun Microsystems, Inc.) 
+		OpenSolaris “gfmul” C Function
 		*/		
 		$X      = str_split(pack("H*",$X),16);				
 		$binY 	= $this->mulX_GHASH;									
@@ -202,30 +203,30 @@ class AES_GCM_SIV
 		$sX	= sizeof($X);				
 		$pH	= $pL = 0;
 		$lH 	= $lL = 0;
-
 	        $i = 0;				
 	        do 	
 			{
 			$uint64  = unpack('P*',$X[$i]);	
+
 			$lH 	^= $uint64[1];
 			$lL 	^= $uint64[2];
-										
+													
 			for($j = 0; $j < $lbinY; $j++) 
 				{							 
 				if ($binY[$j]) 
-					{$pH ^= $lH;
-					 $pL ^= $lL;}				
-				$xLSB  	= $lH;								
-			        $lH 	= ($lH>>1) & PHP_INT_MAX;										
-		            	if ($lL & 1)					    	 
-				    	$lH |= 0x8000000000000000;
-		            	$lL 	= ($lL>>1) & PHP_INT_MAX;     
+					 {$pH 	^=$lH;
+					  $pL 	^=$lL;}
+				
+				$xLSB = $lH;	 				
+				$lH   = ($lL << 63)|(($lH >> 1) & PHP_INT_MAX);
+				$lL   = ($lL >> 1 ) & PHP_INT_MAX;
 				if ($xLSB & 1) 
-					$lL ^= 0xe100000000000000;
+					$lL 	^= 0xe100000000000000;
 				}
-			
-			$lH 	^= $pH;
-			$lL 	^= $pL;
+				
+			$lH 	^=$pH;
+			$lL 	^=$pL;
+	
 			$pH  	 = $pL = 0;
 			}		
 		while   (++$i<$sX);
@@ -252,21 +253,19 @@ function check_AES_GCM_SIV()
 	
 	computing time on x5690 PHP 7.3 x64
 	
-	https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.011319372 s
+	https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.010610745 s
 	
 	more test vectors
 	
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json	 0.005523025 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json	 0.005509699 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json	 1.975459838 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	 2.064822026 s
-	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 1.050135122 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json	 0.005141024 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json	 0.00528642  s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json	 1.784798668 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	 1.884995769 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 1.092802567 s
 	
-	Encryption time average 105 Âµs		
+	Encryption time average 100 µs	(16 byte block)	
 	*/
 	
-	echo "AES GCM SIV test vectors from https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html \n\n";
-			
 	$x=new AES_GCM_SIV;$n=0;
 		
 	if (!function_Exists("hrtime"))
@@ -295,9 +294,7 @@ function check_AES_GCM_SIV()
 		echo "Result    		".$result."\n\n";
 		
 		$x->init($key,$nonce,$aad);							
-
 		$C = $x->AES_GCM_SIV_encrypt($text);
-
 		$D = $x->AES_GCM_SIV_decrypt($C);
 			
 		$ctag = substr($C,-16);
@@ -305,10 +302,78 @@ function check_AES_GCM_SIV()
 		echo "Computed tag 	".bin2hex($ctag)."\n";
 		echo "Computed result ".bin2hex($C)."\n";				
 		echo "Computed dcrypt ".bin2hex($D)."\n\n"; 		
-
 		if (bin2hex($C)!=$result)die("failed");							
 		}
 	echo ((hrtime(true)-$t)/1000000000)." s\n";
 	}
-
 check_AES_GCM_SIV();
+exit;
+	
+function check_AES_GCM_SIV2()
+	{	
+	// https://tools.ietf.org/id/draft-irtf-cfrg-gcmsiv-09.html#rfc.status Appendix C. Test vectors
+	
+	/*
+	computing time on x5690 PHP 7.3 x64
+	
+	https://raw.githubusercontent.com/denobisipsis/PHP_AES-GCM-SIV/master/aes_gcm_siv_test_draft.09.json			 0.011319372 s
+	
+	more test vectors
+	
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json	 0.005141024 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-256-gcm-siv.json	 0.00528642  s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/authentication-1000.json	 1.784798668 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/encryption-1000.json	 1.884995769 s
+	https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/random-keys-10000.json	 1.092802567 s
+	
+	108246
+	106679
+	850153.723
+	965880.216
+	45977
+	*/
+		
+	ECHO "AES GCM SIV test vectors from https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors\n\n";
+			
+	$x=new AES_GCM_SIV;
+		
+	if (!function_Exists("hrtime"))		
+		{function hrtime($bool) {return microtime($bool)*1000000000;}}
+		
+						
+	$testvectors=json_Decode(file_get_contents("https://raw.githubusercontent.com/Metalnem/aes-gcm-siv/master/src/Cryptography.Tests/Vectors/aes-128-gcm-siv.json"));	
+	$t=hrtime(true);$t2=$n=0;
+	foreach ($testvectors->vectors  as $test)
+		{
+		//echo "----------------------------------------TEST CASE ".++$n."\n\n";	
+                ++$n;       
+		//echo "------------------------------ivSize ".$test->ivSize." keySize ".$test->keySize." tagSize ".$test->tagSize."\n\n";
+
+		$plaintext	= $test->plaintext;
+		//$aad	= "";
+		$aad		= $test->aad;	
+		$key		= $test->key;
+		$nonce		= $test->nonce;
+		$result		= $test->result;
+							
+		/*echo "Plaintext 		".$text."\n";
+		echo "AAD       		".$A."\n";
+		echo "Key       		".$key."\n";
+		echo "Nonce     		".$nonce."\n";			
+		
+		echo "Result    		".$result."\n\n";*/
+		
+		$x->init($key,$nonce,$aad);
+		$t1=hrtime(true);							
+		$C = $x->AES_GCM_SIV_encrypt($plaintext);
+		$t2+=hrtime(true)-$t1;
+		$x->AES_GCM_SIV_decrypt($C);
+				
+		/* echo "Computed dcrypt ".bin2hex($D)."\n\n";
+		echo "Computed result ".bin2hex($C)."\n";*/
+		if (bin2hex($C)!=$result)die("failed");	
+	
+		}
+	echo ((hrtime(true)-$t)/1000000000)." s\n";
+	echo ($t2/$n);
+	}
