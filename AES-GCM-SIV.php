@@ -114,7 +114,14 @@ class AES_GCM_SIV
 			$P 	= pack("H*",$P);					
 		$blocks 	= str_split($P,16);
 		$n		= sizeof($blocks);
-		$bl		= bin2hex(pack('P',strlen($P)*8));									
+		$bl		= bin2hex(pack('P',strlen($P)*8));	
+		/**
+		Define the "length block" as a 16-byte value that is the concatenation of the 64-bit, 
+		little-endian encodings of bytelen(additional_data) * 8 and bytelen(plaintext) * 8. 
+		Pad the plaintext and additional data with zeros until they are each a multiple of 16 bytes, 
+		the AES block size. Then X_1, X_2, ... (the series of field elements that are inputs to POLYVAL) 
+		are the concatenation of the padded additional data, the padded plaintext and the length block.
+		*/
 		$input  	= $this->A.$this->siv_pad($P).$this->blength.$bl;
 		$tag    	= $this->siv_tag($input);							 				
 		$tocipher	= $this->siv_init_counters($tag,$n-1);
