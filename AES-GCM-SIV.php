@@ -170,20 +170,21 @@ class AES_GCM_SIV
 	function siv_init_counters($tag,$n)
 		{
 		// compute all block counters
-
+		
+		/**
+		The initial counter block is the tag with the most-significant bit of the last byte set to one. 
+		The counter advances by incrementing the first 32 bits interpreted as an unsigned, little-endian integer, 
+		with overflow
+		*/
+		
 		$final_counter = $counter = $tag|$this->ortag;	
-		$j=0;					
+					
 		for ($k=0;$k<$n;$k++)	
 			{
-			$temp=substr($counter, $j, 4);
+			$temp=substr($counter, 0, 4);
 			extract(unpack('Lcount', $temp));
-			$counter = substr_replace($counter, pack('L', $count+1), $j, 4);
-			$final_counter.=$counter;				
-			if ($temp==pack('H*', 'feffffff')) 
-				{
-				$j+=4;				
-				if ($j>12) break;										
-				}					
+			$counter = substr_replace($counter, pack('L', $count+1), 0, 4);
+			$final_counter.=$counter;									
 		        }	
 		return $final_counter;		
 		}
