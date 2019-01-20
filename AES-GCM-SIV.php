@@ -178,7 +178,9 @@ class AES_GCM_SIV
 		// compute all block counters
 		
 		/**
-		The initial counter block is the tag with the most-significant bit of the last byte set to one. The counter advances by incrementing the first 32 bits interpreted as an unsigned, little-endian integer, with overflow
+		The initial counter block is the tag with the most-significant bit of the last byte set to one. 
+		The counter advances by incrementing the first 32 bits interpreted as an unsigned, little-endian integer, 
+		with overflow
 		*/
 		
 		$counter = $tag|$this->ortag;	
@@ -197,7 +199,8 @@ class AES_GCM_SIV
 		1- Computes Polyval = gfmul($X,mulX_GHASH)
 		2- Xors Polyval
 		3- Encrypt result to return the tag
-		http://src.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/common/crypto/modes/gcm.c#46 (Copyright 2009 Sun Microsystems, Inc.) 
+		http://src.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/common/crypto/modes/gcm.c#46 
+		(Copyright 2009 Sun Microsystems, Inc.) 
 		OpenSolaris “gfmul” C Function
 		*/	
 		
